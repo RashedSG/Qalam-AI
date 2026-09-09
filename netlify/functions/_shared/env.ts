@@ -1,0 +1,33 @@
+/** قراءة متغيرات البيئة الخادمية مع تحقق مبكر وواضح. */
+
+export interface ServerEnv {
+  openaiApiKey: string
+  openaiModel: string
+  supabaseUrl: string
+  supabaseAnonKey: string
+}
+
+export class ConfigError extends Error {}
+
+export function readEnv(): ServerEnv {
+  const openaiApiKey = process.env.OPENAI_API_KEY ?? ''
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? ''
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? ''
+
+  const missing: string[] = []
+  if (!openaiApiKey) missing.push('OPENAI_API_KEY')
+  if (!supabaseUrl) missing.push('SUPABASE_URL')
+  if (!supabaseAnonKey) missing.push('SUPABASE_ANON_KEY')
+
+  if (missing.length) {
+    // لا نكشف القيم — فقط أسماء المتغيرات الناقصة، وفي سجل الخادم فقط.
+    throw new ConfigError(`Missing server environment variables: ${missing.join(', ')}`)
+  }
+
+  return {
+    openaiApiKey,
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
+    supabaseUrl: supabaseUrl.replace(/\/$/, ''),
+    supabaseAnonKey,
+  }
+}
