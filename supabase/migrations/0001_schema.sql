@@ -74,6 +74,9 @@ create table if not exists public.departments (
 );
 
 create index if not exists departments_user_id_idx on public.departments (user_id);
+-- يجعل بذور النظام غير قابلة للتكرار (يدعم ON CONFLICT في 0003_seed.sql)
+create unique index if not exists departments_system_key_idx
+  on public.departments (key) where is_system = true;
 
 -- =============================================================================
 -- 3) profiles — ملف المستخدم (1:1 مع auth.users)
@@ -231,6 +234,9 @@ create table if not exists public.dictionary_entries (
 
 create index if not exists dictionary_category_idx on public.dictionary_entries (category);
 create index if not exists dictionary_user_idx on public.dictionary_entries (user_id);
+-- يجعل بذور النظام غير قابلة للتكرار (يدعم ON CONFLICT في 0003_seed.sql)
+create unique index if not exists dictionary_system_phrase_idx
+  on public.dictionary_entries (phrase) where is_system = true;
 
 -- =============================================================================
 -- 10) favorites — المفضلة

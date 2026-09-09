@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const root = process.cwd()
 const rls = readFileSync(join(root, 'supabase/migrations/0002_rls.sql'), 'utf8')
 const schema = readFileSync(join(root, 'supabase/migrations/0001_schema.sql'), 'utf8')
+const seed = readFileSync(join(root, 'supabase/migrations/0003_seed.sql'), 'utf8')
 
 /** كل الجداول التي يجب أن تكون محمية بـ RLS. */
 const TABLES = [
@@ -88,6 +89,31 @@ describe('Schema', () => {
     expect(declaredColumns.length).toBeGreaterThan(0)
     for (const column of contentColumns) {
       expect(declaredColumns).not.toContain(column)
+    }
+  })
+})
+
+describe('Seed idempotency', () => {
+  // انحدار: `on conflict do nothing` بلا هدف صريح لا يمنع شيئًا ما لم يوجد قيد تفرد،
+  // وكان يضاعف بذور النظام عند إعادة تنفيذ 0003.
+  it('كل ON CONFLICT في البذور يحدد عمودًا صراحةً', () => {
+    const clauses = seed.match(/on conflict[^;]*do nothing/g) ?? []
+    expect(clauses.length).toBe(3)
+    for (const clause of clauses) {
+      expect(clause).toMatch(/on conflict \((key|slug|phrase)\)/)
+    }
+  })
+
+  it('كل هدف تعارض مدعوم بفهرس فريد جزئي في المخطط', () => {
+    for (const [table, column] of [
+      ['departments', 'key'],
+      ['templates', 'slug'],
+      ['dictionary_entries', 'phrase'],
+    ]) {
+      const pattern = new RegExp(
+        `create unique index if not exists \\w+\\s+on public\\.${table} \\(${column}\\) where is_system = true`,
+      )
+      expect(schema).toMatch(pattern)
     }
   })
 })

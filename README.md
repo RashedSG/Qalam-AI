@@ -101,6 +101,18 @@ cp .env.example .env
    | 2 | `supabase/migrations/0002_rls.sql` | **سياسات RLS — إلزامي** |
    | 3 | `supabase/migrations/0003_seed.sql` | الأقسام + ١٣ قالبًا + قاموس قلم |
    | 4 | `supabase/migrations/0004_account.sql` | دوال الحساب والتقدّم |
+   | 5 | `supabase/migrations/0005_seed_idempotency.sql` | يمنع تكرار بذور النظام عند إعادة التنفيذ |
+
+   جميع الملفات آمنة لإعادة التنفيذ (تم التحقق منها بتنفيذها فعليًا على PostgreSQL 16).
+
+   للتأكد بعد التنفيذ:
+
+   ```sql
+   select
+     (select count(*) from departments        where is_system) as departments,  -- 13
+     (select count(*) from templates          where is_system) as templates,    -- 13
+     (select count(*) from dictionary_entries where is_system) as phrases;      -- 17
+   ```
 
    > بديل عبر Supabase CLI: `supabase db push`
 
