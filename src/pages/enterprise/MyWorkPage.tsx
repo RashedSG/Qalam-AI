@@ -14,6 +14,10 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAuthorization } from '@/hooks/useAuthorization'
 import { useToast } from '@/components/ui/Toast'
 import { listMyReferrals, listReferralInstructions, respondToReferral } from '@/services/db/enterprise'
+import { listQueue } from '@/services/db/workflow'
+import { CorrespondenceList } from '@/features/enterprise/CorrespondenceList'
+import { listClassificationLevels } from '@/services/db/enterprise'
+import type { CorrespondenceStatus } from '@/types/database'
 import { formatRelative } from '@/lib/utils'
 import type { Referral } from '@/types/database'
 import type { TranslationKey } from '@/i18n'
@@ -39,6 +43,51 @@ export default function MyWorkPage() {
     queryFn: () => listReferralInstructions(orgId!),
     enabled: Boolean(orgId),
   })
+  const levels = useQuery({
+    queryKey: ['classification-levels', orgId],
+    queryFn: () => listClassificationLevels(orgId!),
+    enabled: Boolean(orgId),
+  })
+
+  /**
+   * الطوابير تعتمد على RLS لا على تصفية في الواجهة: الاستعلام يطلب كل مراسلات
+   * الحالة، وتعيد القاعدة ما يراه المستخدم فقط. من لا يملك نطاقًا يرى قائمة
+   * فارغة — لا حاجة لإخفائها هنا.
+   */
+  const queues: Array<{ key: string; labelKey: TranslationKey; statuses: CorrespondenceStatus[] }> = [
+    { key: 'review', labelKey: 'queue.review', statuses: ['in_review'] },
+    { key: 'approval', labelKey: 'queue.approval', statuses: ['in_approval'] },
+    { key: 'signature', labelKey: 'queue.signature', statuses: ['approved'] },
+    { key: 'returned', labelKey: 'queue.returned', statuses: ['returned'] },
+  ]
+
+  const reviewQueue = useQuery({
+    queryKey: ['queue', orgId, 'in_review'],
+    queryFn: () => listQueue(orgId!, ['in_review']),
+    enabled: Boolean(orgId),
+  })
+  const approvalQueue = useQuery({
+    queryKey: ['queue', orgId, 'in_approval'],
+    queryFn: () => listQueue(orgId!, ['in_approval']),
+    enabled: Boolean(orgId),
+  })
+  const signatureQueue = useQuery({
+    queryKey: ['queue', orgId, 'approved'],
+    queryFn: () => listQueue(orgId!, ['approved']),
+    enabled: Boolean(orgId),
+  })
+  const returnedQueue = useQuery({
+    queryKey: ['queue', orgId, 'returned'],
+    queryFn: () => listQueue(orgId!, ['returned']),
+    enabled: Boolean(orgId),
+  })
+
+  const queueData: Record<string, ReturnType<typeof listQueue> extends Promise<infer T> ? T : never> = {
+    review: reviewQueue.data ?? [],
+    approval: approvalQueue.data ?? [],
+    signature: signatureQueue.data ?? [],
+    returned: returnedQueue.data ?? [],
+  }
 
   const instructionName = useMemo(() => {
     const map = new Map<string, string>()
@@ -166,6 +215,29 @@ export default function MyWorkPage() {
           })}
         </ul>
       )}
+
+      {/* ------------------------- طوابير سير العمل -------------------------
+          كل طابور يعرض ما تسمح به القاعدة فقط، فيبقى فارغًا لمن لا يخصّه. */}
+      {orgId
+        ? queues.map((queue) => {
+            const items = queueData[queue.key] ?? []
+            if (items.length === 0) return null
+            return (
+              <section key={queue.key} className="space-y-3">
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  {t(queue.labelKey)}
+                  <Badge tone="neutral">{items.length}</Badge>
+                </h2>
+                <CorrespondenceList
+                  items={items}
+                  loading={false}
+                  emptyLabel={t('mywork.empty')}
+                  levels={levels.data ?? []}
+                />
+              </section>
+            )
+          })
+        : null}
 
       <Modal
         open={Boolean(respondTo)}

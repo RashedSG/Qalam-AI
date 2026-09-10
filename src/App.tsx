@@ -49,6 +49,7 @@ const AuditPage = lazy(() => import('@/pages/organization/AuditPage'))
 const InboxPage = lazy(() => import('@/pages/enterprise/InboxPage'))
 const OutboxPage = lazy(() => import('@/pages/enterprise/OutboxPage'))
 const MyWorkPage = lazy(() => import('@/pages/enterprise/MyWorkPage'))
+const DelegationPage = lazy(() => import('@/pages/organization/DelegationPage'))
 
 function PageLoader() {
   return (
@@ -105,6 +106,9 @@ export default function App() {
                                   كل عضو قد تُحال إليه مراسلة، والصفحة تعرض
                                   ما يسمح به RLS ولا شيء غيره. */}
                               <Route path="/my-work" element={<MyWorkPage />} />
+                              {/* التفويض بلا حارس: كل عضو يفوّض ما يملكه،
+                                  والقاعدة ترفض تفويض ما لا يملك. */}
+                              <Route path="/delegation" element={<DelegationPage />} />
                               <Route element={<RequirePermission permission="correspondence.view" />}>
                                 <Route path="/inbox" element={<InboxPage />} />
                                 <Route path="/outbox" element={<OutboxPage />} />

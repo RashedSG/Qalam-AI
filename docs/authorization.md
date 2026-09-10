@@ -115,8 +115,16 @@ organization                     مؤسسة
 بمُشغّل في `audit_log`، ومنح الذات يُعلَّم صراحةً بـ `self_grant: true` — وهو
 أول سطر يبحث عنه المدقق.
 
-**فصل المهام** (`creator ≠ approver`, `reviewer ≠ signatory`) سياسة اختيارية
-مُخطَّطة للمرحلة ٤.
+**فصل المهام** (`creator ≠ approver`, `reviewer ≠ signatory`) نُفِّذ في المرحلة ٤
+كسياسة اختيارية لكل مؤسسة — راجع [`workflow.md`](workflow.md).
+
+---
+
+## ⚠️ سلطة الفعل ≠ صلاحية الاطّلاع
+
+`can_access_correspondence` تستثني المالك (صفوفك صفوفك). `can_act_on_correspondence`
+**لا تستثنيه**: كتابة مراسلة ليست صلاحية اعتمادها. الأولى للقراءة والتعديل،
+والثانية للانتقالات والاعتماد والتوقيع. التفصيل في [`workflow.md`](workflow.md).
 
 ---
 

@@ -373,6 +373,7 @@ export const ar = {
     'لم يتم ضبط اتصال Supabase. انسخ ملف .env.example إلى .env واملأ VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY ثم أعد تشغيل التطبيق.',
 
   'nav.correspondence': 'المراسلات',
+  'nav.delegation': 'التفويض',
   'nav.library': 'المكتبة',
   'nav.administration': 'الإدارة',
   'nav.organization': 'المؤسسة',
@@ -543,6 +544,52 @@ export const ar = {
   'notif.referral.overdue': 'إحالة تجاوزت موعدها.',
   'notif.correspondence.returned': 'أُعيدت إليك مراسلة.',
   'notif.correspondence.approved': 'اعتُمدت مراسلة.',
+
+  // سير العمل
+  'wf.title': 'سير العمل',
+  'wf.history': 'سجل الإجراءات',
+  'wf.noHistory': 'لم يبدأ سير العمل بعد.',
+  'wf.comment': 'تعليق',
+  'wf.commentRequired': 'هذا الإجراء يتطلب سببًا.',
+  'wf.done': 'تم الإجراء.',
+  'wf.noActions': 'لا إجراءات متاحة لك على هذه المراسلة الآن.',
+  'wf.sign': 'توقيع',
+  'wf.signed': 'وُقّعت المراسلة.',
+  'wf.signatures': 'التواقيع',
+  'wf.signatureNote': 'توقيع داخلي في سير العمل: هوية ووقت وبصمة نص. ليس توقيعًا رقميًا مؤهَّلًا قانونيًا.',
+  'wf.signedBy': 'وقّعها',
+  'wf.revise': 'تنقيح النسخة المعتمدة',
+  'wf.reviseHint': 'يُحفظ النص المعتمد إصدارًا، وتعود المراسلة مسودة لإعادة الدورة.',
+  'wf.reviseReason': 'سبب التنقيح',
+  'wf.revised': 'حُفظ المعتمد وأُعيدت المراسلة مسودة.',
+  'wf.locked': 'النسخة معتمدة — التعديل يمر بالتنقيح.',
+
+  // التفويض
+  'deleg.title': 'التفويض',
+  'deleg.subtitle': 'تفويض مؤقت لصلاحياتك أثناء غيابك. ينتهي بنفسه ولا يمنح أوسع مما تملك.',
+  'deleg.new': 'تفويض جديد',
+  'deleg.empty': 'لا توجد تفويضات.',
+  'deleg.delegate': 'المفوَّض إليه',
+  'deleg.permissions': 'الصلاحيات المفوَّضة',
+  'deleg.from': 'من',
+  'deleg.until': 'حتى',
+  'deleg.scope': 'حصر في وحدة',
+  'deleg.scopeAll': 'نطاقي كاملًا',
+  'deleg.reason': 'السبب',
+  'deleg.revoke': 'إلغاء',
+  'deleg.active': 'ساري',
+  'deleg.expired': 'منتهٍ',
+  'deleg.revoked': 'مُلغى',
+  'deleg.scheduled': 'لم يبدأ',
+  'deleg.given': 'فوّضتُها',
+  'deleg.received': 'فُوِّضت إليّ',
+  'deleg.maxYear': 'أقصى مدة سنة واحدة.',
+
+  // صندوق العمل
+  'queue.review': 'بانتظار المراجعة',
+  'queue.approval': 'بانتظار الاعتماد',
+  'queue.signature': 'بانتظار التوقيع',
+  'queue.returned': 'مُعادة إليّ',
 } as const
 
 export type TranslationKey = keyof typeof ar

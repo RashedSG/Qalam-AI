@@ -16,6 +16,7 @@ import {
   ScrollText,
   Settings,
   ClipboardList,
+  UserCheck,
   ShieldCheck,
   Sparkles,
   Star,
@@ -82,6 +83,7 @@ export const ADMIN_NAV: NavItem[] = [
  */
 export const ENTERPRISE_NAV: NavItem[] = [
   { to: '/my-work', labelKey: 'nav.mywork', icon: ClipboardList },
+  { to: '/delegation', labelKey: 'nav.delegation', icon: UserCheck },
   { to: '/inbox', labelKey: 'nav.inbox', icon: Inbox, permission: 'correspondence.view' },
   { to: '/outbox', labelKey: 'nav.outbox', icon: Send, permission: 'correspondence.view' },
 ]

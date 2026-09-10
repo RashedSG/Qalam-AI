@@ -17,6 +17,9 @@ const refNumbers = readFileSync(join(root, 'supabase/migrations/0013_reference_n
 const attachments = readFileSync(join(root, 'supabase/migrations/0014_attachments.sql'), 'utf8')
 const referrals = readFileSync(join(root, 'supabase/migrations/0015_referrals_notifications.sql'), 'utf8')
 const rlsPhase3 = readFileSync(join(root, 'supabase/migrations/0016_rls_phase3.sql'), 'utf8')
+const workflow = readFileSync(join(root, 'supabase/migrations/0018_workflow.sql'), 'utf8')
+const delegation = readFileSync(join(root, 'supabase/migrations/0019_delegation.sql'), 'utf8')
+const rlsPhase4 = readFileSync(join(root, 'supabase/migrations/0020_rls_phase4.sql'), 'utf8')
 
 /** كل الجداول التي يجب أن تكون محمية بـ RLS. */
 const TABLES = [
@@ -548,6 +551,138 @@ describe('المرحلة ٣ — المراسلة المؤسسية', () => {
       expect(stripped, `${name} لا يحذف عمودًا`).not.toMatch(/drop column/i)
       expect(stripped, `${name} لا يمسح بيانات`).not.toMatch(/truncate/i)
       expect(stripped, `${name} لا يفرض not null على عمود قائم`).not.toMatch(/alter column \w+ set not null/i)
+    }
+  })
+})
+
+describe('المرحلة ٤ — سير العمل والتفويض', () => {
+  const PHASE4_TABLES = [
+    'workflow_transitions', 'correspondence_transitions', 'signatures',
+    'delegations', 'delegation_permissions',
+  ]
+
+  it('تُفعّل RLS على كل جدول جديد', () => {
+    for (const table of PHASE4_TABLES) {
+      expect(rlsPhase4, table).toMatch(new RegExp(`alter table public\\.${table}\\s+enable row level security;`))
+    }
+  })
+
+  it('سلطة الفعل منفصلة عن صلاحية الاطّلاع — المالك لا يُستثنى', () => {
+    // خلل أمسكته بوابة المرحلة: can_access_row تُرجع true للمالك فورًا،
+    // فكان الموظف يعتمد مراسلته بنفسه.
+    const fn = workflow.slice(workflow.indexOf('function public.can_act_on_correspondence('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl, 'لا استثناء للمالك في سلطة الفعل').not.toMatch(/p_owner_id = uid then return true/)
+    expect(impl).toMatch(/permission_scope\(p_permission, p_organization_id\)/)
+    // ونطاق 'own' يعني صفوفه هو — لا تجاهل الملكية بالكلية.
+    expect(impl).toMatch(/if scope = 'own' then return p_owner_id = uid; end if;/)
+  })
+
+  it('الانتقال يستخدم سلطة الفعل لا صلاحية الاطّلاع', () => {
+    const fn = workflow.slice(workflow.indexOf('function public.transition_correspondence('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/can_act_on_correspondence/)
+    expect(impl, 'استخدام دالة الاطّلاع هنا يعيد الخلل').not.toMatch(/can_access_correspondence/)
+  })
+
+  it('الانتقالات المتاحة تُشتق من نفس السلطة', () => {
+    const fn = workflow.slice(workflow.indexOf('function public.available_transitions('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/can_act_on_correspondence/)
+    expect(impl, 'وتحترم فصل المهام فلا يظهر زر يفشل').toMatch(/separation_of_duties_block/)
+  })
+
+  it('لا انتقال مثبّت في الكود — الخريطة في جدول', () => {
+    expect(workflow).toMatch(/create table if not exists public\.workflow_transitions/)
+    const fn = workflow.slice(workflow.indexOf('function public.transition_correspondence('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/from public\.workflow_transitions/)
+    expect(impl).toMatch(/transition from % to % is not allowed/)
+  })
+
+  it('عمود الحالة محمي بطبقتين', () => {
+    // صلاحية العمود تمنع قبل تقييم السياسة، والمُشغّل يمسك ما يفلت.
+    expect(rlsPhase4).toMatch(/revoke update \(current_status\) on public\.correspondences from authenticated;/)
+    expect(workflow).toMatch(/revoke update \(current_status\) on public\.correspondences from authenticated;/)
+    expect(workflow).toMatch(/status changes must go through transition_correspondence\(\)/)
+  })
+
+  it('النسخة المعتمدة لا تُعدَّل في مكانها', () => {
+    const fn = workflow.slice(workflow.indexOf('function public.guard_approved_content('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/'approved', 'signed', 'issued', 'closed'/)
+    expect(impl).toMatch(/approved content is immutable/)
+    expect(workflow, 'والتنقيح يحفظ المعتمد إصدارًا').toMatch(/insert into public\.correspondence_versions/)
+  })
+
+  it('التوقيع لا يدّعي ما ليس له', () => {
+    expect(workflow).toMatch(/ليس توقيعًا رقميًا مؤهَّلًا قانونيًا/)
+    expect(workflow, 'أعمدة المزوّد مُهيَّأة ولا تُملأ اليوم').toMatch(/provider\s+text,/)
+    expect(workflow, 'وبصمة النص تُثبت ما وُقّع عليه').toMatch(/encode\(sha256/)
+  })
+
+  it('التوقيع لا يُعدَّل، ومُشغّله لا يمنع الحذف المتتالي', () => {
+    // مُشغّل يرفض DELETE كان سيجعل حذف المراسلة أو الحساب مستحيلًا.
+    expect(rlsPhase4).toMatch(/before update on public\.signatures/)
+    const trigger = rlsPhase4.slice(rlsPhase4.indexOf('create trigger signatures_no_change'))
+    expect(trigger.slice(0, trigger.indexOf(';'))).not.toMatch(/delete/)
+    expect(rlsPhase4).toMatch(/revoke insert, update, delete on public\.signatures\s+from authenticated;/)
+  })
+
+  it('فصل المهام سياسة اختيارية مُطفأة افتراضيًا', () => {
+    const fn = workflow.slice(workflow.indexOf('function public.separation_of_duties_block('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    // coalesce(..., false) ⇒ الغياب يعني مُطفأة، فلا يتغيّر سلوك قائم.
+    expect(impl).toMatch(/coalesce\(\(policy ->> 'creator_not_approver'\)::boolean, false\)/)
+    expect(impl).toMatch(/coalesce\(\(policy ->> 'reviewer_not_signatory'\)::boolean, false\)/)
+  })
+
+  it('التفويض لا يمنح أوسع مما يملكه المفوِّض', () => {
+    const create = delegation.slice(delegation.indexOf('function public.create_delegation('))
+    expect(create.slice(0, create.indexOf('$$;'))).toMatch(/you do not hold the permission/)
+
+    // والأهم: يُفحص عند كل استعلام لا عند الإنشاء فقط.
+    const scope = delegation.slice(delegation.indexOf('function public.delegated_scope('))
+    const impl = scope.slice(0, scope.indexOf('$$;'))
+    expect(impl).toMatch(/permission_scope_direct\(p_permission, p_organization_id, row_data\.delegator_id\)/)
+    expect(impl, 'تفويض محصور بوحدة لا يمنح نطاق المؤسسة').toMatch(/granted := 'descendants'/)
+  })
+
+  it('التفويض ينتهي بنفسه ولا يعتمد على أحد', () => {
+    const scope = delegation.slice(delegation.indexOf('function public.delegated_scope('))
+    const impl = scope.slice(0, scope.indexOf('$$;'))
+    expect(impl).toMatch(/d\.starts_at <= now\(\)/)
+    expect(impl).toMatch(/d\.ends_at > now\(\)/)
+    expect(impl).toMatch(/d\.revoked_at is null/)
+
+    const create = delegation.slice(delegation.indexOf('function public.create_delegation('))
+    const createImpl = create.slice(0, create.indexOf('$$;'))
+    expect(createImpl, 'لا مدة مفتوحة').toMatch(/needs an end date/)
+    expect(createImpl, 'ولا تفويض دائم متنكّر').toMatch(/cannot exceed one year/)
+  })
+
+  it('permission_scope تجمع الأدوار والتفويض دون تغيير أي سياسة', () => {
+    const fn = delegation.slice(delegation.indexOf('function public.permission_scope(p_permission'))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/permission_scope_direct/)
+    expect(impl).toMatch(/delegated_scope/)
+    expect(impl, 'يُؤخذ الأوسع').toMatch(/order by public\.scope_rank\(scope\) desc/)
+  })
+
+  it('التفويض والانتقالات والتواقيع لا تُكتب مباشرة', () => {
+    for (const table of ['delegations', 'delegation_permissions', 'correspondence_transitions', 'signatures']) {
+      expect(rlsPhase4, table).toMatch(
+        new RegExp(`revoke insert, update, delete on public\\.${table}\\s+from authenticated;`),
+      )
+    }
+  })
+
+  it('المرحلة ٤ إضافية — لا حذف بيانات ولا تضييق قيد', () => {
+    for (const [name, sql] of [['0018', workflow], ['0019', delegation], ['0020', rlsPhase4]] as const) {
+      const stripped = sql.replace(/--[^\n]*/g, '')
+      expect(stripped, `${name} لا يحذف جدولًا`).not.toMatch(/drop table/i)
+      expect(stripped, `${name} لا يحذف عمودًا`).not.toMatch(/drop column/i)
+      expect(stripped, `${name} لا يمسح بيانات`).not.toMatch(/truncate/i)
     }
   })
 })

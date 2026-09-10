@@ -40,6 +40,7 @@ import { addFavorite } from '@/services/db/favorites'
 import { createTemplate } from '@/services/db/templates'
 import { issueReferenceNumber, listClassificationLevels } from '@/services/db/enterprise'
 import { ReferralPanel } from '@/features/enterprise/ReferralPanel'
+import { WorkflowPanel } from '@/features/enterprise/WorkflowPanel'
 import { AttachmentPanel } from '@/features/enterprise/AttachmentPanel'
 import { CORRESPONDENCE_TYPE_LABELS, PRIORITY_LABELS, TONE_LABELS, label } from '@/data/reference'
 import { copyToClipboard, deriveTitle, formatDate, formatRelative } from '@/lib/utils'
@@ -437,6 +438,7 @@ export default function CorrespondenceDetailPage() {
           تظهر فقط للمراسلات المرتبطة بمؤسسة — الوضع الشخصي لا يراها. */}
       {data.organization_id ? (
         <>
+          <WorkflowPanel correspondenceId={data.id} currentStatus={data.current_status ?? 'draft'} />
           <ReferralPanel correspondenceId={data.id} />
           <AttachmentPanel
             correspondenceId={data.id}

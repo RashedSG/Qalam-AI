@@ -390,3 +390,69 @@ export interface AppNotification {
   read_at: Timestamp | null
   created_at: Timestamp
 }
+
+/* ============================================================================
+ * المرحلة ٤ — سير العمل والتفويض
+ * ========================================================================== */
+
+export interface WorkflowTransitionRule {
+  id: Uuid
+  organization_id: Uuid | null
+  from_status: CorrespondenceStatus
+  to_status: CorrespondenceStatus
+  required_permission: string
+  requires_comment: boolean
+  label_ar: string
+  label_en: string
+  sort_order: number
+  is_active: boolean
+}
+
+/** انتقال متاح للمستخدم الآن — ما تعيده `available_transitions`. */
+export interface AvailableTransition {
+  to_status: CorrespondenceStatus
+  label_ar: string
+  label_en: string
+  requires_comment: boolean
+  sort_order: number
+}
+
+export interface CorrespondenceTransition {
+  id: Uuid
+  correspondence_id: Uuid
+  organization_id: Uuid | null
+  actor_id: Uuid
+  from_status: CorrespondenceStatus
+  to_status: CorrespondenceStatus
+  comment: string
+  version_id: Uuid | null
+  created_at: Timestamp
+}
+
+export interface Signature {
+  id: Uuid
+  correspondence_id: Uuid
+  organization_id: Uuid | null
+  signer_id: Uuid
+  /** 'internal_workflow' اليوم — ليس توقيعًا رقميًا مؤهَّلًا قانونيًا. */
+  method: 'internal_workflow' | 'external_provider'
+  provider: string | null
+  provider_ref: string | null
+  /** بصمة ما وُقّع عليه فعلًا. */
+  content_hash: string | null
+  signed_at: Timestamp
+}
+
+export interface Delegation {
+  id: Uuid
+  organization_id: Uuid
+  delegator_id: Uuid
+  delegate_id: Uuid
+  starts_at: Timestamp
+  ends_at: Timestamp
+  scope_unit_id: Uuid | null
+  reason: string
+  revoked_at: Timestamp | null
+  revoked_by: Uuid | null
+  created_at: Timestamp
+}
