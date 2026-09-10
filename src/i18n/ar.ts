@@ -590,6 +590,28 @@ export const ar = {
   'queue.approval': 'بانتظار الاعتماد',
   'queue.signature': 'بانتظار التوقيع',
   'queue.returned': 'مُعادة إليّ',
+
+  // مساعد قلم
+  'nav.assistant': 'مساعد قلم',
+  'agent.title': 'مساعد قلم',
+  'agent.subtitle': 'اسأله عن مراسلاتك، أو اطلب منه تجهيز رد. يقرأ ما تراه أنت فقط.',
+  'agent.placeholder': 'اكتب سؤالك…',
+  'agent.send': 'إرسال',
+  'agent.thinking': 'يبحث ويحلّل…',
+  'agent.clear': 'محادثة جديدة',
+  'agent.empty': 'ابدأ بسؤال.',
+  'agent.sources': 'المصادر',
+  'agent.noSources': 'اقتراح عام — بلا مصدر داخلي.',
+  'agent.toolsUsed': 'الأدوات المستخدمة',
+  'agent.injectionWarning': 'انتبه: أحد المستندات في هذه المحادثة يحوي نصًّا يحاول توجيه المساعد. عُومل نصًّا ولم يُنفَّذ.',
+  'agent.stopped.max_steps': 'توقّف عند حد الخطوات. جرّب سؤالًا أضيق.',
+  'agent.stopped.max_tool_calls': 'توقّف عند حد البحث. جرّب سؤالًا أضيق.',
+  'agent.stopped.token_budget': 'توقّف عند حد الحجم. جرّب سؤالًا أضيق.',
+  'agent.limits': 'المساعد يقترح ولا ينفّذ: لا يعتمد ولا يوقّع ولا يُصدر ولا يحذف.',
+  'agent.examples': 'أمثلة',
+  'agent.ex1': 'شو المطلوب مني هذا الأسبوع؟',
+  'agent.ex2': 'طلّع لي المراسلات السابقة عن الميزانية',
+  'agent.ex3': 'لخّص لي آخر كتاب وارد',
 } as const
 
 export type TranslationKey = keyof typeof ar

@@ -197,3 +197,86 @@ describe('رؤوس الأمان', () => {
     expect(netlifyToml).toMatch(/for = "\/\.netlify\/functions\/\*"/)
   })
 })
+
+describe('وكيل قلم — الحدود البنيوية', () => {
+  const agentTools = readFileSync(join(root, 'netlify/functions/_shared/agentTools.ts'), 'utf8')
+  const agentLoop = readFileSync(join(root, 'netlify/functions/_shared/agentLoop.ts'), 'utf8')
+  const agentFn = readFileSync(join(root, 'netlify/functions/agent.ts'), 'utf8')
+  const migration = readFileSync(join(root, 'supabase/migrations/0021_agent_foundation.sql'), 'utf8')
+
+  it('كل أداة وكيل في القاعدة security invoker — لا تجاوز لـRLS', () => {
+    // security definer في أداة وكيل = مسار تجاوز كامل، وأخطر خطأ ممكن هنا.
+    const blocks = migration.split('create or replace function public.agent_').slice(1)
+    const readTools = blocks.filter((block) => /^(search|get|list)/.test(block))
+    expect(readTools.length).toBeGreaterThan(0)
+    for (const block of readTools) {
+      const header = block.slice(0, block.indexOf('as $$'))
+      const name = block.slice(0, block.indexOf('('))
+      expect(header, `agent_${name} يجب أن تكون security invoker`).toMatch(/security invoker/)
+      expect(header, `agent_${name} يجب ألا تكون security definer`).not.toMatch(/security definer/)
+    }
+  })
+
+  it('الأدوات تُستدعى برمز المستخدم لا بمفتاح إداري', () => {
+    expect(agentTools).toMatch(/Authorization: `Bearer \$\{ctx\.accessToken\}`/)
+    expect(stripComments(agentTools)).not.toMatch(/service_role/i)
+    expect(stripComments(agentFn)).not.toMatch(/service_role/i)
+  })
+
+  it('لا أداة كتابة في السجل', () => {
+    const names = [...agentTools.matchAll(/name: '([a-z_]+)'/g)].map((match) => match[1])
+    expect(names.length).toBeGreaterThan(3)
+    for (const name of names) {
+      expect(name, `${name} يبدو أداة كتابة`).not.toMatch(
+        /^(create|update|delete|approve|sign|issue|refer|transition|revise|grant|set|send)_/,
+      )
+    }
+  })
+
+  it('كل محتوى خارجي يُغلَّف — رسائل المستخدم ونتائج الأدوات', () => {
+    expect(agentLoop).toMatch(/wrapUntrusted\(turn\.content/)
+    expect(agentLoop).toMatch(/wrapUntrusted\(JSON\.stringify\(result\)/)
+  })
+
+  it('تعليمات النظام تُصرّح بحدود الوكيل', () => {
+    expect(agentLoop).toMatch(/لا تعتمد مراسلة ولا توقّعها/)
+    expect(agentLoop).toMatch(/أدواتك للقراءة فقط/)
+    expect(agentLoop).toMatch(/UNTRUSTED_CONTRACT/)
+  })
+
+  it('الحلقة محدودة من كل الجهات', () => {
+    for (const limit of ['maxSteps', 'maxToolCalls', 'timeoutMs', 'maxTotalTokens']) {
+      expect(agentLoop, limit).toContain(limit)
+    }
+    expect(agentLoop, 'قائمة سماح للأدوات').toMatch(/findTool\(call\.function\.name\)/)
+  })
+
+  it('جسم خطأ المزوّد لا يُقرأ في مسار الوكيل', () => {
+    const failure = agentLoop.slice(agentLoop.indexOf('if (!res.ok)'), agentLoop.indexOf('const data ='))
+    expect(failure).not.toMatch(/res\.(text|json)\(\)/)
+  })
+
+  it('لا يُسجَّل نص رسالة ولا نتيجة أداة', () => {
+    // نقتطع الاستدعاء نفسه لا نافذة تقديرية: النافذة الواسعة تبتلع كتلة
+    // الإرجاع التي تحمل reply بطبيعتها، فيفشل الاختبار لسبب خاطئ.
+    const start = agentFn.indexOf("log.info('ai.completed'")
+    const logCall = agentFn.slice(start, agentFn.indexOf('})', start) + 2)
+    for (const forbidden of ['reply', 'content', 'messages', 'citations']) {
+      expect(logCall, `السجل يجب ألا يحمل ${forbidden}`).not.toContain(forbidden)
+    }
+    // السجل يحمل الأسماء والنتائج المنطقية فقط.
+    expect(agentLoop).toMatch(/toolCalls\.push\(\{ tool: call\.function\.name, ok, ms:/)
+  })
+
+  it('حصة الوكيل مستقلة عن حصة المهام البسيطة', () => {
+    expect(agentFn).toMatch(/begin_agent_run/)
+    expect(agentFn).toMatch(/finish_agent_run/)
+    expect(migration).toMatch(/'agent_limits'/)
+  })
+
+  it('الواجهة لا تتصل بأي مزوّد مباشرة', () => {
+    const client = readFileSync(join(root, 'src/services/ai/agent.ts'), 'utf8')
+    expect(client).toMatch(/\/\.netlify\/functions/)
+    expect(stripComments(client)).not.toMatch(/api\.openai\.com/)
+  })
+})

@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Bot,
   User,
   Users,
 } from 'lucide-react'
@@ -42,6 +43,9 @@ export const PRIMARY_NAV: NavItem[] = [
   { to: '/improve', labelKey: 'nav.improve', icon: Sparkles },
   { to: '/translate', labelKey: 'nav.translate', icon: Languages },
   { to: '/learn', labelKey: 'nav.learn', icon: GraduationCap },
+  // المساعد في التنقل الرئيسي لا في قسم المؤسسة: أدواته تمر بمسار المالك في
+  // RLS، فيعمل للمستخدم الشخصي على مراسلاته هو.
+  { to: '/assistant', labelKey: 'nav.assistant', icon: Bot },
 ]
 
 export const LIBRARY_NAV: NavItem[] = [

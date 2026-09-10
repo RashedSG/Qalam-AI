@@ -50,6 +50,7 @@ const InboxPage = lazy(() => import('@/pages/enterprise/InboxPage'))
 const OutboxPage = lazy(() => import('@/pages/enterprise/OutboxPage'))
 const MyWorkPage = lazy(() => import('@/pages/enterprise/MyWorkPage'))
 const DelegationPage = lazy(() => import('@/pages/organization/DelegationPage'))
+const AssistantPage = lazy(() => import('@/pages/enterprise/AssistantPage'))
 
 function PageLoader() {
   return (
@@ -105,6 +106,7 @@ export default function App() {
                               {/* المراسلة المؤسسية. «صندوق عملي» بلا حارس:
                                   كل عضو قد تُحال إليه مراسلة، والصفحة تعرض
                                   ما يسمح به RLS ولا شيء غيره. */}
+                              <Route path="/assistant" element={<AssistantPage />} />
                               <Route path="/my-work" element={<MyWorkPage />} />
                               {/* التفويض بلا حارس: كل عضو يفوّض ما يملكه،
                                   والقاعدة ترفض تفويض ما لا يملك. */}
