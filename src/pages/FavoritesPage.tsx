@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Star, Trash2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, Star, Trash2 } from 'lucide-react'
 import { Card, CardBody } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -10,17 +11,28 @@ import { useToast } from '@/components/ui/Toast'
 import { listFavorites, removeFavorite } from '@/services/db/favorites'
 import { formatRelative } from '@/lib/utils'
 
-const KIND_LABEL: Record<string, string> = {
-  template: 'قالب',
-  phrase: 'عبارة',
-  correspondence: 'مراسلة',
-}
-
 export default function FavoritesPage() {
-  const { t, lang } = useI18n()
+  const { t, lang, dir } = useI18n()
   const { user } = useAuth()
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const Arrow = dir === 'rtl' ? ArrowLeft : ArrowRight
+
+  /** المفضلة تخزّن `ref_id` للعنصر الأصلي — نفتحه فقط حين نعرف صفحته. */
+  const targetOf = (kind: string, refId: string | null) => {
+    if (!refId) return null
+    if (kind === 'correspondence') return `/correspondence/${refId}`
+    if (kind === 'template') return '/templates'
+    return null
+  }
+
+  const kindLabel = (kind: string) => {
+    if (kind === 'template') return t('favorites.kind.template')
+    if (kind === 'phrase') return t('favorites.kind.phrase')
+    if (kind === 'correspondence') return t('favorites.kind.correspondence')
+    return kind
+  }
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['favorites', user?.id],
@@ -66,20 +78,32 @@ export default function FavoritesPage() {
                 <CardBody className="flex items-start gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone="gold">{KIND_LABEL[fav.kind] ?? fav.kind}</Badge>
+                      <Badge tone="gold">{kindLabel(fav.kind)}</Badge>
                       <span className="q-muted text-xs">{formatRelative(fav.created_at, lang)}</span>
                     </div>
                     <p className="mt-2 font-medium">{fav.label || '—'}</p>
                     {fav.content ? <p className="q-muted mt-1 text-sm leading-7">{fav.content}</p> : null}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeMutation.mutate(fav.id)}
-                    aria-label={t('common.unfavorite')}
-                  >
-                    <Trash2 className="size-4 text-red-600" aria-hidden="true" />
-                  </Button>
+                  <span className="flex shrink-0 gap-1">
+                    {targetOf(fav.kind, fav.ref_id) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(targetOf(fav.kind, fav.ref_id)!)}
+                      >
+                        {t('favorites.open')}
+                        <Arrow className="size-3.5" aria-hidden="true" />
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeMutation.mutate(fav.id)}
+                      aria-label={t('common.unfavorite')}
+                    >
+                      <Trash2 className="size-4 text-red-600" aria-hidden="true" />
+                    </Button>
+                  </span>
                 </CardBody>
               </Card>
             </li>

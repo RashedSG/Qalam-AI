@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { History as HistoryIcon, Search } from 'lucide-react'
+import { Archive, History as HistoryIcon, Search } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Input } from '@/components/ui/Input'
@@ -22,7 +22,8 @@ import { formatDate } from '@/lib/utils'
 export default function HistoryPage() {
   const { t, lang } = useI18n()
   const { user } = useAuth()
-  const [filters, setFilters] = useState<HistoryFilters>({})
+  // الافتراضي: المراسلات النشطة فقط — المؤرشفة تُعرض بتبويب مستقل.
+  const [filters, setFilters] = useState<HistoryFilters>({ archived: false })
   const [searchInput, setSearchInput] = useState('')
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -38,8 +39,27 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-6">
-      <header>
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t('history.title')}</h1>
+
+        <div className="flex rounded-xl border p-0.5" style={{ borderColor: 'rgb(var(--q-border))' }} role="group">
+          {([false, true] as const).map((value) => (
+            <button
+              key={String(value)}
+              type="button"
+              onClick={() => setFilters((p) => ({ ...p, archived: value }))}
+              aria-pressed={filters.archived === value}
+              className={`flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-sm font-medium transition-colors ${
+                filters.archived === value
+                  ? 'bg-navy-700 text-white dark:bg-beige-100 dark:text-navy-900'
+                  : 'hover:bg-[rgb(var(--q-surface-2))]'
+              }`}
+            >
+              {value ? <Archive className="size-3.5" aria-hidden="true" /> : null}
+              {value ? t('history.archived') : t('history.active')}
+            </button>
+          ))}
+        </div>
       </header>
 
       <form onSubmit={applySearch} className="space-y-3">
@@ -119,7 +139,7 @@ export default function HistoryPage() {
         <Card>
           <EmptyState
             icon={<HistoryIcon className="size-7 text-[rgb(var(--q-text-muted))]" aria-hidden="true" />}
-            title={t('history.empty')}
+            title={filters.archived ? t('history.emptyArchive') : t('history.empty')}
           />
         </Card>
       ) : (

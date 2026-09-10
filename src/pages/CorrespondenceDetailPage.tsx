@@ -1,7 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Copy, FileCheck2, History, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  ArrowRight,
+  Copy,
+  FileCheck2,
+  History,
+  LayoutTemplate,
+  Pencil,
+  Sparkles,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -17,8 +31,11 @@ import {
   deleteCorrespondence,
   getCorrespondence,
   listVersions,
+  setArchived,
   updateCorrespondence,
 } from '@/services/db/correspondences'
+import { addFavorite } from '@/services/db/favorites'
+import { createTemplate } from '@/services/db/templates'
 import { CORRESPONDENCE_TYPE_LABELS, PRIORITY_LABELS, TONE_LABELS, label } from '@/data/reference'
 import { copyToClipboard, deriveTitle, formatDate, formatRelative } from '@/lib/utils'
 import type { CorrespondenceType, Tone } from '@/types/domain'
@@ -37,6 +54,9 @@ export default function CorrespondenceDetailPage() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [draftSubject, setDraftSubject] = useState('')
   const [draftBody, setDraftBody] = useState('')
+  const [busyAction, setBusyAction] = useState<'archive' | 'favorite' | 'template' | null>(null)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateTitle, setTemplateTitle] = useState('')
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['correspondence', id],
@@ -133,6 +153,69 @@ export default function CorrespondenceDetailPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  const toggleArchive = async () => {
+    if (!id || !data) return
+    setBusyAction('archive')
+    try {
+      await setArchived(id, !data.is_archived)
+      await queryClient.invalidateQueries({ queryKey: ['correspondence', id] })
+      await queryClient.invalidateQueries({ queryKey: ['correspondences'] })
+      toast(data.is_archived ? t('detail.unarchived') : t('detail.archived'), 'success')
+    } catch {
+      toast(t('error.saveFailed'), 'error')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const favorite = async () => {
+    if (!id || !data || !user) return
+    setBusyAction('favorite')
+    try {
+      await addFavorite({
+        user_id: user.id,
+        kind: 'correspondence',
+        ref_id: id,
+        label: data.title || data.subject || '—',
+        content: data.recipient,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['favorites'] })
+      toast(t('common.saved'), 'success')
+    } catch {
+      toast(t('error.saveFailed'), 'error')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  /** يحوّل مراسلة أعجبتك إلى قالب تعيد استخدامه لاحقًا. */
+  const saveAsTemplate = async () => {
+    if (!data || !user) return
+    const title = templateTitle.trim()
+    if (!title) return
+    setBusyAction('template')
+    try {
+      const isArabic = data.language === 'ar'
+      await createTemplate({
+        user_id: user.id,
+        title_ar: isArabic ? title : '',
+        title_en: isArabic ? '' : title,
+        body_ar: isArabic ? data.body : '',
+        body_en: isArabic ? '' : data.body,
+        description_ar: data.subject,
+        correspondence_type: data.correspondence_type,
+        tone: data.tone,
+      })
+      await queryClient.invalidateQueries({ queryKey: ['templates'] })
+      toast(t('detail.templateSaved'), 'success')
+      setTemplateOpen(false)
+    } catch {
+      toast(t('error.saveFailed'), 'error')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -183,6 +266,7 @@ export default function CorrespondenceDetailPage() {
               <Badge tone={data.priority === 'urgent' ? 'danger' : 'neutral'}>
                 {label(PRIORITY_LABELS[data.priority], lang)}
               </Badge>
+              {data.is_archived ? <Badge tone="gold">{t('history.archived')}</Badge> : null}
             </div>
           }
         />
@@ -263,6 +347,30 @@ export default function CorrespondenceDetailPage() {
                 <FileCheck2 className="size-3.5" aria-hidden="true" />
                 {t('result.review')}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={busyAction === 'template'}
+                onClick={() => {
+                  setTemplateTitle(data.subject || data.title || '')
+                  setTemplateOpen(true)
+                }}
+              >
+                <LayoutTemplate className="size-3.5" aria-hidden="true" />
+                {t('detail.saveAsTemplate')}
+              </Button>
+              <Button variant="outline" size="sm" loading={busyAction === 'favorite'} onClick={favorite}>
+                <Star className="size-3.5" aria-hidden="true" />
+                {t('common.favorite')}
+              </Button>
+              <Button variant="outline" size="sm" loading={busyAction === 'archive'} onClick={toggleArchive}>
+                {data.is_archived ? (
+                  <ArchiveRestore className="size-3.5" aria-hidden="true" />
+                ) : (
+                  <Archive className="size-3.5" aria-hidden="true" />
+                )}
+                {data.is_archived ? t('detail.unarchive') : t('detail.archive')}
+              </Button>
               <Button variant="ghost" size="sm" className="ms-auto" onClick={() => setConfirmDelete(true)}>
                 <Trash2 className="size-3.5 text-red-600" aria-hidden="true" />
                 {t('common.delete')}
@@ -329,6 +437,28 @@ export default function CorrespondenceDetailPage() {
           </ul>
         )}
       </Card>
+
+      <Modal
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        title={t('detail.saveAsTemplate')}
+        description={t('detail.saveAsTemplateHint')}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setTemplateOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button loading={busyAction === 'template'} disabled={!templateTitle.trim()} onClick={saveAsTemplate}>
+              {t('common.save')}
+            </Button>
+          </>
+        }
+      >
+        <label htmlFor="tpl-title" className="mb-1.5 block text-sm font-medium">
+          {t('templates.name')}
+        </label>
+        <Input id="tpl-title" value={templateTitle} onChange={(e) => setTemplateTitle(e.target.value)} autoFocus />
+      </Modal>
 
       <Modal
         open={confirmDelete}

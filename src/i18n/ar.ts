@@ -47,6 +47,7 @@ export const ar = {
   'common.favorite': 'إضافة للمفضلة',
   'common.unfavorite': 'إزالة من المفضلة',
   'common.irreversible': 'لا يمكن التراجع عن هذا الإجراء.',
+  'common.category': 'التصنيف',
 
   // التنقل
   'nav.dashboard': 'الرئيسية',
@@ -160,6 +161,13 @@ export const ar = {
   'detail.restore': 'استرجاع',
   'detail.versionLoaded': 'حُمّل الإصدار في المحرر — اضغط «حفظ التعديلات» لتثبيته.',
   'detail.autoVersionNote': 'النص قبل التعديل',
+  'detail.archive': 'أرشفة',
+  'detail.unarchive': 'إخراج من الأرشيف',
+  'detail.archived': 'مؤرشفة',
+  'detail.unarchived': 'أُخرجت من الأرشيف.',
+  'detail.saveAsTemplate': 'حفظ كقالب',
+  'detail.saveAsTemplateHint': 'سيُحفظ نص هذه المراسلة قالبًا خاصًا بك يمكنك البدء منه لاحقًا.',
+  'detail.templateSaved': 'حُفظ القالب — تجده في صفحة القوالب.',
 
   // التحليل
   'analysis.title': 'فهمتُ طلبك',
@@ -273,6 +281,12 @@ export const ar = {
   'templates.system': 'قالب النظام',
   'templates.mine': 'قوالبي',
   'templates.empty': 'لا توجد قوالب مطابقة.',
+  'templates.new': 'قالب جديد',
+  'templates.newHint': 'اكتب نصًا تستخدمه كثيرًا ليصبح قالبًا جاهزًا.',
+  'templates.name': 'اسم القالب',
+  'templates.description': 'وصف مختصر',
+  'templates.body': 'نص القالب',
+  'templates.bodyHint': 'اترك مسافات مثل [الجهة] أو [التاريخ] لتملأها عند الاستخدام.',
 
   // القاموس
   'dictionary.title': 'قاموس قلم',
@@ -285,6 +299,10 @@ export const ar = {
   'dictionary.explain': 'اشرح بالذكاء الاصطناعي',
   'dictionary.empty': 'لا توجد عبارات مطابقة.',
   'dictionary.searchPlaceholder': 'ابحث عن عبارة…',
+  'dictionary.new': 'عبارة جديدة',
+  'dictionary.newHint': 'أضف صياغة تستخدمها كثيرًا لتجدها جاهزة في قاموسك.',
+  'dictionary.phrase': 'العبارة',
+  'dictionary.mine': 'عباراتي',
 
   // المسودات والسجل
   'drafts.title': 'مسوداتي',
@@ -294,8 +312,15 @@ export const ar = {
   'history.title': 'سجل المراسلات',
   'history.empty': 'لا توجد مراسلات محفوظة.',
   'history.searchPlaceholder': 'ابحث في الموضوع أو النص…',
+  'history.active': 'الحالية',
+  'history.archived': 'المؤرشفة',
+  'history.emptyArchive': 'لا توجد مراسلات مؤرشفة.',
   'favorites.title': 'المفضلة',
   'favorites.empty': 'لم تضف شيئًا إلى المفضلة بعد.',
+  'favorites.open': 'فتح',
+  'favorites.kind.template': 'قالب',
+  'favorites.kind.phrase': 'عبارة',
+  'favorites.kind.correspondence': 'مراسلة',
 
   // الملف والإعدادات
   'profile.title': 'الملف الشخصي',

@@ -47,7 +47,7 @@ export default function DashboardPage() {
 
   const { data: recent, isLoading } = useQuery({
     queryKey: ['correspondences', user?.id, 'recent'],
-    queryFn: () => listCorrespondences(user!.id, {}, 5),
+    queryFn: () => listCorrespondences(user!.id, { archived: false }, 5),
     enabled: Boolean(user?.id),
   })
 

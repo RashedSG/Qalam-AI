@@ -8,6 +8,8 @@ export interface HistoryFilters {
   departmentKey?: string
   from?: string
   to?: string
+  /** true = المؤرشفة فقط · false (الافتراضي) = غير المؤرشفة · undefined = الكل */
+  archived?: boolean
 }
 
 export async function listCorrespondences(
@@ -22,6 +24,7 @@ export async function listCorrespondences(
     .order('created_at', { ascending: false })
     .limit(limit)
 
+  if (filters.archived !== undefined) query = query.eq('is_archived', filters.archived)
   if (filters.type) query = query.eq('correspondence_type', filters.type)
   if (filters.language) query = query.eq('language', filters.language)
   if (filters.departmentKey) query = query.eq('department_key', filters.departmentKey)
@@ -67,6 +70,11 @@ export async function updateCorrespondence(
     .single()
   if (error) throw error
   return data as Correspondence
+}
+
+/** أرشفة المراسلة أو إخراجها من الأرشيف. */
+export async function setArchived(id: string, archived: boolean): Promise<Correspondence> {
+  return updateCorrespondence(id, { is_archived: archived })
 }
 
 export async function deleteCorrespondence(id: string): Promise<void> {
