@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   BookOpen,
   BookMarked,
   Building2,
@@ -90,4 +91,5 @@ export const ENTERPRISE_NAV: NavItem[] = [
   { to: '/delegation', labelKey: 'nav.delegation', icon: UserCheck },
   { to: '/inbox', labelKey: 'nav.inbox', icon: Inbox, permission: 'correspondence.view' },
   { to: '/outbox', labelKey: 'nav.outbox', icon: Send, permission: 'correspondence.view' },
+  { to: '/reports', labelKey: 'nav.reports', icon: BarChart3, permission: 'correspondence.view' },
 ]

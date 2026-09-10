@@ -80,19 +80,69 @@ export async function previewReferenceFormat(format: string, padding: number): P
 
 export interface DirectionFilters {
   search?: string
+  /** رقم المراسلة — الداخلي أو الخارجي. */
+  reference?: string
+  /** طرفٌ: مرسِل أو مستقبِل، شخصًا كان أو جهة. */
+  party?: string
   status?: string
   classification?: string
   unitId?: string
+  /** ISO. حدّ أدنى وأعلى لتاريخ الإنشاء. */
+  from?: string
+  to?: string
   overdueOnly?: boolean
+  includeArchived?: boolean
 }
 
+const hasFilters = (filters: DirectionFilters) =>
+  Boolean(
+    filters.search ||
+      filters.reference ||
+      filters.party ||
+      filters.status ||
+      filters.classification ||
+      filters.unitId ||
+      filters.from ||
+      filters.to ||
+      filters.overdueOnly ||
+      filters.includeArchived,
+  )
+
+/**
+ * قائمة مراسلات باتجاه معيّن مع تصفية.
+ *
+ * البحث النصّي يمرّ بـ`search_correspondence` في القاعدة لا بـILIKE هنا:
+ * التسوية العربية (التشكيل، التطويل، صور الألف والتاء المربوطة) لا تُجرى في
+ * المتصفح — ما في القاعدة هو النص الأصلي، ولو سوّينا طرفًا واحدًا لما تطابقا.
+ * الدالة `security invoker` فلا تتجاوز RLS بحال.
+ */
 export async function listByDirection(
   organizationId: string,
   direction: Direction,
   filters: DirectionFilters = {},
   limit = 50,
 ): Promise<Correspondence[]> {
-  let query = supabase
+  if (hasFilters(filters)) {
+    const { data, error } = await supabase.rpc('search_correspondence', {
+      p_organization_id: organizationId,
+      p_direction: direction,
+      p_query: filters.search ?? null,
+      p_reference: filters.reference ?? null,
+      p_party: filters.party ?? null,
+      p_status: filters.status ?? null,
+      p_classification: filters.classification ?? null,
+      p_unit_id: filters.unitId ?? null,
+      p_from: filters.from ?? null,
+      p_to: filters.to ?? null,
+      p_overdue_only: filters.overdueOnly ?? false,
+      p_include_archived: filters.includeArchived ?? false,
+      p_limit: limit,
+    })
+    if (error) throw error
+    return (data ?? []) as Correspondence[]
+  }
+
+  const { data, error } = await supabase
     .from('correspondences')
     .select('*')
     .eq('organization_id', organizationId)
@@ -100,19 +150,6 @@ export async function listByDirection(
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
     .limit(limit)
-
-  if (filters.search) {
-    const term = `%${filters.search}%`
-    query = query.or(
-      `subject.ilike.${term},body.ilike.${term},reference_number.ilike.${term},sender.ilike.${term}`,
-    )
-  }
-  if (filters.status) query = query.eq('current_status', filters.status)
-  if (filters.classification) query = query.eq('classification_key', filters.classification)
-  if (filters.unitId) query = query.eq('owner_unit_id', filters.unitId)
-  if (filters.overdueOnly) query = query.lt('due_at', new Date().toISOString())
-
-  const { data, error } = await query
   if (error) throw error
   return (data ?? []) as Correspondence[]
 }

@@ -20,6 +20,7 @@ const rlsPhase3 = readFileSync(join(root, 'supabase/migrations/0016_rls_phase3.s
 const workflow = readFileSync(join(root, 'supabase/migrations/0018_workflow.sql'), 'utf8')
 const delegation = readFileSync(join(root, 'supabase/migrations/0019_delegation.sql'), 'utf8')
 const rlsPhase4 = readFileSync(join(root, 'supabase/migrations/0020_rls_phase4.sql'), 'utf8')
+const phase7 = readFileSync(join(root, 'supabase/migrations/0022_enterprise_readiness.sql'), 'utf8')
 
 /** كل الجداول التي يجب أن تكون محمية بـ RLS. */
 const TABLES = [
@@ -684,5 +685,134 @@ describe('المرحلة ٤ — سير العمل والتفويض', () => {
       expect(stripped, `${name} لا يحذف عمودًا`).not.toMatch(/drop column/i)
       expect(stripped, `${name} لا يمسح بيانات`).not.toMatch(/truncate/i)
     }
+  })
+})
+
+describe('المرحلة ٧ — الجاهزية المؤسسية', () => {
+  /** ما بين تعريف دالة و`$$;` — لا تلتقط ما بعدها. */
+  const body = (sql: string, name: string) => {
+    const start = sql.indexOf(`function public.${name}(`)
+    expect(start, `${name} غير موجودة`).toBeGreaterThan(-1)
+    return sql.slice(start, sql.indexOf('$$;', start))
+  }
+
+  /** تقارير المراسلات: تجميعٌ لما يراه القارئ، فتسري عليها RLS. */
+  const INVOKER_REPORTS = [
+    'report_correspondence_summary', 'report_by_unit',
+    'report_by_external_entity', 'report_referrals',
+  ]
+  const REPORTS = [...INVOKER_REPORTS, 'report_ai_usage']
+
+  it('⚠️ كل تقرير مراسلات `security invoker` — لأنه يُجمّع ما يراه القارئ', () => {
+    for (const name of INVOKER_REPORTS) {
+      const impl = body(phase7, name)
+      expect(impl, `${name} يجب ألّا تكون definer — لتجاوزت RLS`).not.toMatch(/security definer/)
+      expect(impl, name).toMatch(/security invoker/)
+    }
+  })
+
+  it('⚠️ الاستثناء الوحيد — تقرير الاستخدام — يحمل بوابة صلاحية صريحة', () => {
+    // استخدام المؤسسة يقرأ صفوف أعضاء آخرين، وRLS تحصر كلًّا في صفوفه.
+    // فهو definer بالضرورة — ولذلك يجب أن يفحص الصلاحية بنفسه قبل أي شيء.
+    const impl = body(phase7, 'report_ai_usage')
+    expect(impl).toMatch(/security definer/)
+    expect(impl).toMatch(/set search_path = public/)
+    const gate = impl.slice(impl.indexOf('begin'), impl.indexOf('return query'))
+    expect(gate, 'الفحص قبل أي استعلام').toMatch(/has_permission\('audit\.view', p_organization_id\)/)
+    expect(gate).toMatch(/raise exception/)
+  })
+
+  it('البحث كذلك `security invoker` ولا يكرّر منطق الصلاحيات', () => {
+    const impl = body(phase7, 'search_correspondence')
+    expect(impl).toMatch(/security invoker/)
+    expect(impl).not.toMatch(/security definer/)
+    expect(impl, 'الفحص في RLS لا هنا').not.toMatch(/has_permission|permission_scope|clearance_rank/)
+  })
+
+  /* ------------------------------ التحقق العلني ------------------------------ */
+
+  it('⚠️ `verify_correspondence` وحدها ما يُمنح لـanon', () => {
+    const grants = [...phase7.matchAll(/grant execute on function ([^\n]*?) to ([^;]*);/g)]
+    for (const [, target, roles] of grants) {
+      if (/\banon\b/.test(roles)) {
+        expect(target, 'دالة أخرى مُنحت لـanon').toMatch(/verify_correspondence/)
+      }
+    }
+    expect(phase7, 'ولا جدول واحد').toMatch(/revoke all on all tables in schema public from anon;/)
+  })
+
+  it('⚠️ التحقق لا يعيد موضوعًا ولا نصًّا ولا أطرافًا ولا تصنيفًا', () => {
+    const impl = body(phase7, 'verify_correspondence')
+    const returns = impl.slice(impl.indexOf('returns table'), impl.indexOf(')', impl.indexOf('returns table')))
+    for (const forbidden of ['subject', 'body', 'sender', 'recipient', 'classification', 'user_id']) {
+      expect(returns, `المخرجات يجب ألّا تحمل ${forbidden}`).not.toContain(forbidden)
+    }
+    expect(impl, 'المسودة لا وجود لها علنًا').toMatch(/current_status in \('issued', 'closed', 'archived'\)/)
+  })
+
+  it('رمز التحقق عشوائي لا مشتقّ من المعرّف', () => {
+    const impl = body(phase7, 'ensure_verification_token')
+    expect(impl).toMatch(/gen_random_bytes\(\s*24\s*\)/)
+    expect(impl, 'اشتقاقه من المعرّف يجعله قابلًا للتعداد').not.toMatch(/new\.id|md5\(/)
+  })
+
+  it('لا يُبنى رابط التحقق في الواجهة من معرّف المراسلة', () => {
+    const panel = readFileSync(join(root, 'src/features/enterprise/DocumentPanel.tsx'), 'utf8')
+    const url = panel.slice(panel.indexOf('const verifyUrl'), panel.indexOf('if (!issued)'))
+    expect(url).toMatch(/verification_token/)
+    expect(url, 'المعرّف ليس رمز تحقق').not.toMatch(/correspondence\.id/)
+  })
+
+  /* ------------------------------ التصنيف ------------------------------ */
+
+  it('⚠️ التصنيف المجهول يمنع لا يفتح', () => {
+    const impl = body(phase7, 'can_access_row')
+    expect(impl, 'الفشل إلى الإغلاق').toMatch(/if needed_rank is null then return false; end if;/)
+    // الشكل القديم كان يلفّ فحص التخليص كلّه داخل `if needed_rank is not null`.
+    expect(impl).not.toMatch(/if needed_rank is not null then/)
+  })
+
+  it('عمود التصنيف مقيَّد مرجعيًّا بالمؤسسة نفسها', () => {
+    expect(phase7).toMatch(/foreign key \(organization_id, classification_key\)/)
+    expect(phase7).toMatch(/references public\.classification_levels \(organization_id, key\)/)
+    expect(phase7, 'حذف مستوى مستعمَل يجب أن يُرفض').toMatch(/on delete restrict/)
+  })
+
+  it('يُتحقَّق من البيانات قبل إضافة القيد — لا ترقية تنكسر', () => {
+    const guard = phase7.slice(phase7.indexOf('bad_rows integer'), phase7.indexOf('correspondences_classification_fk\n'))
+    expect(guard).toMatch(/select count\(\*\) into bad_rows/)
+    expect(guard).toMatch(/raise notice/)
+  })
+
+  /* ------------------------------ الخصوصية ------------------------------ */
+
+  it('التقارير تُرجع أعدادًا لا محتوى', () => {
+    for (const name of REPORTS) {
+      const impl = body(phase7, name)
+      const returns = impl.slice(impl.indexOf('returns table'), impl.indexOf('language sql'))
+      expect(returns, `${name} يجب ألّا يُرجع نصّ المراسلة`).not.toMatch(/\bbody\b/)
+    }
+  })
+
+  it('التسوية العربية IMMUTABLE — شرط صلاحيتها في فهرس', () => {
+    const impl = body(phase7, 'qalam_normalize_ar')
+    expect(impl).toMatch(/immutable/)
+  })
+
+  it('المرحلة ٧ إضافية — لا حذف بيانات ولا حذف عمود', () => {
+    const stripped = phase7.replace(/--[^\n]*/g, '')
+    expect(stripped).not.toMatch(/drop table/i)
+    expect(stripped).not.toMatch(/drop column/i)
+    expect(stripped).not.toMatch(/truncate/i)
+  })
+
+  it('حوكمة القوالب لا تمسّ القوالب الشخصية', () => {
+    const impl = body(phase7, 'transition_template')
+    expect(impl).toMatch(/personal templates do not enter governance/)
+    expect(impl).toMatch(/has_permission\('templates\.manage'/)
+    const select = phase7.slice(phase7.indexOf('create policy "templates_select"'))
+    expect(select.slice(0, select.indexOf(';')), 'صاحب القالب يراه دائمًا').toMatch(
+      /user_id = \(select auth\.uid\(\)\)/,
+    )
   })
 })

@@ -14,7 +14,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAuthorization } from '@/hooks/useAuthorization'
 import { useToast } from '@/components/ui/Toast'
 import { CorrespondenceList } from '@/features/enterprise/CorrespondenceList'
-import { listByDirection, listClassificationLevels, registerIncoming } from '@/services/db/enterprise'
+import { CorrespondenceFilters } from '@/features/enterprise/CorrespondenceFilters'
+import { type DirectionFilters, listByDirection, listClassificationLevels, registerIncoming } from '@/services/db/enterprise'
 
 const emptyForm = {
   subject: '',
@@ -34,13 +35,13 @@ export default function InboxPage() {
   const { organization, membership, can } = useAuthorization()
   const orgId = organization?.id
 
-  const [search, setSearch] = useState('')
+  const [filters, setFilters] = useState<DirectionFilters>({})
   const [createOpen, setCreateOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
 
   const items = useQuery({
-    queryKey: ['correspondence', orgId, 'incoming', search],
-    queryFn: () => listByDirection(orgId!, 'incoming', { search: search || undefined }),
+    queryKey: ['correspondence', orgId, 'incoming', filters],
+    queryFn: () => listByDirection(orgId!, 'incoming', filters),
     enabled: Boolean(orgId),
   })
   const levels = useQuery({
@@ -94,11 +95,11 @@ export default function InboxPage() {
         ) : null}
       </header>
 
-      <Input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder={t('history.searchPlaceholder')}
-        aria-label={t('common.search')}
+      <CorrespondenceFilters
+        organizationId={orgId}
+        levels={levels.data ?? []}
+        value={filters}
+        onChange={setFilters}
       />
 
       {items.isError ? <ErrorState message={t('error.loadFailed')} onRetry={() => items.refetch()} /> : null}

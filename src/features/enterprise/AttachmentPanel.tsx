@@ -96,10 +96,15 @@ export function AttachmentPanel({
           <h2 className="text-base font-semibold">{t('attach.title')}</h2>
           {canUpload ? (
             <>
+              {/* الزرّ المجاور هو أداة الرفع المعلنة؛ هذا الحقل تفصيلٌ تقني.
+                  `sr-only` وحدها تُبقيه في مسار التنقّل بلا اسم، فيقع عليه
+                  قارئ الشاشة ولا يعرف ما هو — فنُخرجه من الشجرة كلّها. */}
               <input
                 ref={fileInput}
                 type="file"
                 className="sr-only"
+                aria-hidden="true"
+                tabIndex={-1}
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   e.target.value = ''

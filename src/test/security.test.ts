@@ -375,3 +375,79 @@ describe('المساعد الصوتي — الخصوصية والحدود', () =
     expect(mediaSrc, 'لا مستضيف خارجي للوسائط').not.toMatch(/https?:\/\//)
   })
 })
+
+describe('المرحلة ٧ — الوثيقة والتقارير والتحقق', () => {
+  const qr = readFileSync(join(root, 'src/lib/qr.ts'), 'utf8')
+  const qrComponent = readFileSync(join(root, 'src/components/ui/QrCode.tsx'), 'utf8')
+  const printable = readFileSync(join(root, 'src/features/enterprise/PrintableDocument.tsx'), 'utf8')
+  const documentPanel = readFileSync(join(root, 'src/features/enterprise/DocumentPanel.tsx'), 'utf8')
+  const verifyPage = readFileSync(join(root, 'src/pages/VerifyPage.tsx'), 'utf8')
+  const reportsService = readFileSync(join(root, 'src/services/db/reports.ts'), 'utf8')
+  const css = readFileSync(join(root, 'src/index.css'), 'utf8')
+
+  it('⚠️ رمز QR يُولَّد محليًّا — لا خدمة خارجية تتلقّى رابط التحقق', () => {
+    for (const [name, source] of [['qr.ts', qr], ['QrCode.tsx', qrComponent]] as const) {
+      const stripped = stripComments(source)
+      expect(stripped, `${name} لا يطلب الشبكة`).not.toMatch(/fetch\(|XMLHttpRequest|https?:\/\//)
+      expect(stripped, `${name} لا يستدعي مولّد رموز خارجيًا`).not.toMatch(/chart\.googleapis|qrserver|api\./)
+    }
+  })
+
+  it('لا شيء في الوثيقة المطبوعة يُحمَّل من نطاق آخر', () => {
+    const stripped = stripComments(printable)
+    const images = [...stripped.matchAll(/<img[^>]*src=\{([^}]*)\}/g)].map((m) => m[1])
+    for (const src of images) {
+      expect(src, 'الصورة من إعدادات المؤسسة فقط').toMatch(/branding\./)
+    }
+    expect(stripped, 'لا رابط خارجي مثبّت').not.toMatch(/src="https?:\/\//)
+  })
+
+  it('سياسة أمن المحتوى لا تسمح بصور من نطاقات أخرى', () => {
+    const csp = netlifyToml.slice(netlifyToml.indexOf('Content-Security-Policy'))
+    const imgSrc = csp.slice(csp.indexOf('img-src'), csp.indexOf(';', csp.indexOf('img-src')))
+    expect(imgSrc).toContain("'self'")
+    expect(imgSrc, 'لا نطاق خارجي في img-src').not.toMatch(/https?:\/\//)
+  })
+
+  it('⚠️ الطباعة تُخفي جذر التطبيق كلّه لا عناصر مختارة', () => {
+    // إخفاء العناصر واحدًا واحدًا هشّ: بطاقةٌ جديدة بلا `q-no-print` تتسرّب
+    // إلى الورقة الرسمية بلا أن ينتبه أحد.
+    const print = css.slice(css.indexOf('@media print'))
+    expect(print).toMatch(/#root\s*\{\s*display:\s*none\s*!important/)
+    expect(print).toMatch(/\.q-print-portal\s*\{\s*display:\s*block\s*!important/)
+    expect(documentPanel, 'الوثيقة تعيش خارج شجرة الصفحة').toMatch(/createPortal\(/)
+  })
+
+  it('زرّ الطباعة لا يظهر قبل الإصدار — والقاعدة هي التي تمنع الرمز أصلًا', () => {
+    expect(documentPanel).toMatch(/const ISSUED_STATUSES = new Set\(\['issued', 'closed', 'archived'\]\)/)
+    expect(documentPanel).toMatch(/if \(!issued\)/)
+  })
+
+  it('⚠️ لا ادّعاء اعتماد حكومي في أي مكان', () => {
+    // الاختبار نفسه يحمل نصّ النمط، فيُستثنى هو وأمثاله.
+    const files = walk(join(root, 'src')).filter(
+      (file) => !file.includes('/test/') && !file.endsWith('.test.ts') && !file.endsWith('.test.tsx'),
+    )
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8')
+      expect(text, `${file} يدّعي اعتمادًا`).not.toMatch(/government[- ]approved|معتمد حكومي|معتمدة حكوميًّا/i)
+    }
+    // والعكس مطلوب: نفي صريح معروض للمستخدم.
+    const ar = readFileSync(join(root, 'src/i18n/ar.ts'), 'utf8')
+    expect(ar).toMatch(/'brand\.disclaimer':/)
+    expect(printable, 'وتنبيهٌ في الكود نفسه').toMatch(/لا ادّعاء اعتماد/)
+  })
+
+  it('صفحة التحقق لا تطلب شيئًا سوى دالة التحقق', () => {
+    const stripped = stripComments(verifyPage)
+    expect(stripped).toMatch(/verifyDocument/)
+    expect(stripped, 'لا استعلام جدول من صفحة علنية').not.toMatch(/supabase\.from\(/)
+    expect(stripped, 'ولا جلسة').not.toMatch(/useAuth|getSession/)
+  })
+
+  it('خدمة التقارير لا تكرّر منطق الصلاحيات في المتصفح', () => {
+    const stripped = stripComments(reportsService)
+    expect(stripped, 'الصلاحية تُقرَّر في القاعدة').not.toMatch(/has_permission|clearance|scope|role/i)
+    expect(stripped, 'ولا تُبتلع أخطاؤها').toMatch(/if \(error\) throw error/)
+  })
+})

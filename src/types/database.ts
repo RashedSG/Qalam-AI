@@ -95,6 +95,10 @@ export interface Correspondence {
   /** الوحدة المالكة. null = ارجع إلى وحدة المالك. */
   owner_unit_id?: Uuid | null
   parent_id?: Uuid | null
+
+  /* المرحلة ٧. */
+  /** رمز التحقق العلني. تولّده القاعدة عند الإصدار — لا يُكتب من التطبيق. */
+  verification_token?: string | null
 }
 
 export interface CorrespondenceVersion {
@@ -142,7 +146,15 @@ export interface Template {
   is_system: boolean
   created_at: Timestamp
   updated_at: Timestamp
+
+  /* المرحلة ٧ — حوكمة القوالب المؤسسية. القوالب الشخصية تبقى 'draft'. */
+  status?: TemplateStatus
+  published_at?: Timestamp | null
+  published_by?: Uuid | null
+  retired_at?: Timestamp | null
 }
+
+export type TemplateStatus = 'draft' | 'in_review' | 'approved' | 'published' | 'retired'
 
 export interface DictionaryEntry {
   id: Uuid
@@ -298,6 +310,12 @@ export type Direction = 'incoming' | 'outgoing' | 'internal'
 export type CorrespondenceStatus =
   | 'draft' | 'in_review' | 'returned' | 'in_approval'
   | 'approved' | 'signed' | 'issued' | 'closed' | 'archived'
+/** بترتيب دورة الحياة — تعتمد عليه قوائم التصفية. */
+export const CORRESPONDENCE_STATUSES: readonly CorrespondenceStatus[] = [
+  'draft', 'in_review', 'returned', 'in_approval',
+  'approved', 'signed', 'issued', 'closed', 'archived',
+]
+
 export type ReferralStatus = 'pending' | 'acknowledged' | 'responded' | 'closed'
 export type LinkKind = 'related' | 'supersedes' | 'reference'
 export type NotificationKind =

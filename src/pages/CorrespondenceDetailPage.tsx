@@ -42,6 +42,7 @@ import { issueReferenceNumber, listClassificationLevels } from '@/services/db/en
 import { ReferralPanel } from '@/features/enterprise/ReferralPanel'
 import { WorkflowPanel } from '@/features/enterprise/WorkflowPanel'
 import { AttachmentPanel } from '@/features/enterprise/AttachmentPanel'
+import { DocumentPanel } from '@/features/enterprise/DocumentPanel'
 import { CORRESPONDENCE_TYPE_LABELS, PRIORITY_LABELS, TONE_LABELS, label } from '@/data/reference'
 import { copyToClipboard, deriveTitle, formatDate, formatRelative } from '@/lib/utils'
 import type { CorrespondenceType, Tone } from '@/types/domain'
@@ -446,6 +447,7 @@ export default function CorrespondenceDetailPage() {
             classificationKey={data.classification_key ?? null}
             canUpload={data.user_id === user?.id || can('attachment.upload')}
           />
+          <DocumentPanel correspondence={data} organization={organization ?? null} />
         </>
       ) : null}
 

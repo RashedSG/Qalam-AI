@@ -51,6 +51,8 @@ const OutboxPage = lazy(() => import('@/pages/enterprise/OutboxPage'))
 const MyWorkPage = lazy(() => import('@/pages/enterprise/MyWorkPage'))
 const DelegationPage = lazy(() => import('@/pages/organization/DelegationPage'))
 const AssistantPage = lazy(() => import('@/pages/enterprise/AssistantPage'))
+const VerifyPage = lazy(() => import('@/pages/VerifyPage'))
+const ReportsPage = lazy(() => import('@/pages/enterprise/ReportsPage'))
 
 function PageLoader() {
   return (
@@ -108,6 +110,7 @@ export default function App() {
                                   ما يسمح به RLS ولا شيء غيره. */}
                               <Route path="/assistant" element={<AssistantPage />} />
                               <Route path="/my-work" element={<MyWorkPage />} />
+                              <Route path="/reports" element={<ReportsPage />} />
                               {/* التفويض بلا حارس: كل عضو يفوّض ما يملكه،
                                   والقاعدة ترفض تفويض ما لا يملك. */}
                               <Route path="/delegation" element={<DelegationPage />} />
@@ -133,6 +136,10 @@ export default function App() {
                             </Route>
                           </Route>
                         </Route>
+
+                        {/* التحقق العلني: خارج كل الحُرّاس عن قصد — يصله من
+                            لا حساب له. ولا يعرض إلا رقم الوثيقة وتاريخها وجهتها. */}
+                        <Route path="/verify" element={<VerifyPage />} />
 
                         <Route path="/index.html" element={<Navigate to="/" replace />} />
                         <Route path="*" element={<NotFoundPage />} />
