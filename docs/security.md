@@ -164,8 +164,9 @@ values ('someone@example.com', now() + interval '14 days');
 
 | البند | المرحلة |
 |---|---|
-| عزل المؤسسات، الأدوار، الصلاحيات، النطاقات | ٢ |
-| سجل تدقيق (Audit Log) غير قابل للتعديل | ٢ |
+| ~~عزل المؤسسات، الأدوار، الصلاحيات، النطاقات~~ | ✅ ٢ — راجع [`authorization.md`](authorization.md) |
+| ~~سجل تدقيق (Audit Log) غير قابل للتعديل~~ | ✅ ٢ |
+| فصل المهام (creator ≠ approver) | ٤ |
 | تصنيف أمني يؤثر في التحكم بالوصول | ٣ |
 | مرفقات في Storage خاص + سياسات وصول | ٣ |
 | انتقالات Workflow محمية | ٤ |
@@ -179,9 +180,9 @@ values ('someone@example.com', now() + interval '14 days');
 ## ٩. التحقق
 
 ```bash
-npm run test            # 139 اختبارًا، منها 22 أمنيًا و24 لـRLS
+npm run test            # 167 اختبارًا، منها 22 أمنيًا و43 لـRLS
 npm run build           # لا أسرار ولا prompts في dist/
 ```
 
-اختبارات التكامل على PostgreSQL حقيقي (21 اختبارًا) تحتاج `QALAM_TEST_DATABASE_URL`
+اختبارات التكامل على PostgreSQL حقيقي (61 اختبارًا) تحتاج `QALAM_TEST_DATABASE_URL`
 وتُتخطى بدونه — راجع `docs/testing.md`.

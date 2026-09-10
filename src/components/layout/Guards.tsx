@@ -1,7 +1,9 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
+import { useAuthorization } from '@/hooks/useAuthorization'
 import { Spinner } from '@/components/ui/Spinner'
+import type { PermissionKey, Scope } from '@/types/permissions'
 
 function FullPageLoader() {
   return (
@@ -39,5 +41,25 @@ export function RedirectIfAuthenticated() {
   const { user, loading } = useAuth()
   if (loading) return <FullPageLoader />
   if (user) return <Navigate to="/dashboard" replace />
+  return <Outlet />
+}
+
+/**
+ * يمنع فتح صفحة إدارية بلا صلاحية.
+ *
+ * ⚠️ هذا تحسين تجربة لا حاجز أمني: من يفتح المسار يدويًا لن يرى بيانات لأن
+ * كل استعلام خلفه يمر بـ RLS. الحاجز الحقيقي في قاعدة البيانات وحدها.
+ */
+export function RequirePermission({
+  permission,
+  scope = 'own',
+}: {
+  permission: PermissionKey
+  scope?: Scope
+}) {
+  const { can, loading } = useAuthorization()
+
+  if (loading) return <FullPageLoader />
+  if (!can(permission, scope)) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }

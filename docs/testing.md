@@ -61,11 +61,14 @@ create table if not exists auth.users (
   created_at timestamptz not null default now()
 );
 
+-- ⚠️ nullif قبل التحويل: current_setting قد يعيد '' لا NULL، و''::jsonb خطأ.
+--    هذا ما يفعله auth.uid() الحقيقي في Supabase بالضبط، وإغفاله يجعل
+--    الاختبارات تفشل بـ«invalid input syntax for type json» بعد reset.
 create or replace function auth.uid() returns uuid language sql stable as $$
-  select nullif(current_setting('request.jwt.claims', true)::json ->> 'sub', '')::uuid
+  select nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub', '')::uuid
 $$;
 create or replace function auth.role() returns text language sql stable as $$
-  select coalesce(nullif(current_setting('request.jwt.claims', true)::json ->> 'role',''), 'anon')
+  select coalesce(nullif(nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role', ''), 'anon')
 $$;
 
 grant usage on schema auth to anon, authenticated, service_role;
@@ -101,7 +104,19 @@ QALAM_TEST_DATABASE_URL=postgres://localhost/qalam_test npm run test
 - **الاختبار السلبي يفحص الأثر لا الاستثناء.** غياب سياسة `UPDATE` في RLS لا يرمي
   خطأ: يُحدَّث صفر صفوف بصمت. الادّعاء الصحيح هو `rowCount === 0` وقيمة الصف بعدها.
 
-### ما تُثبته حاليًا (٢١ اختبارًا)
+### ما تُثبته حاليًا (٦١ اختبارًا)
+
+**التفويض المؤسسي — `rbac.integration.test.ts` (٤٠):**
+
+- انحدار: كل مستخدم يرى مراسلاته، ولا يرى زميلًا في وحدة أخرى، وصف بلا مؤسسة يبقى لمالكه
+- النطاقات: `descendants` يرى ما تحته لا ما فوقه ولا الوحدة الشقيقة؛ تعدد الأدوار يأخذ الأوسع
+- عزل المؤسسات: نطاق «المؤسسة كاملة» في (ب) لا يرى مراسلة ولا هيكلًا ولا عضوًا في (أ)
+- منع التصعيد: أدوار النظام غير قابلة للتعديل؛ منح الذات ممكن لكنه مُسجَّل ومُعلَّم
+- دورة الحياة: التعطيل والتعليق يُنهيان الوصول فورًا؛ نقل موظف ينقل نطاق رؤيته
+- الشجرة: صيانة المسار، إعادة بناء مسارات الأحفاد، منع الحلقات وعبور المؤسسات
+- السجل: إلحاقي فعلًا، ولا يمنع حذف الحساب (انحدار مُثبَت)
+
+**المرحلة ١ — `db.integration.test.ts` (٢١):**
 
 - حد المعدّل: الاندفاع، الدقيقة، السقف اليومي، العزل بين المستخدمين، الضبط من `app_settings`
 - التتبّع: لا عمود محتوى، لا حسم لطلب غيرك، لا إعادة كتابة لسجل محسوم، قصّ رمز الخطأ

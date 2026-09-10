@@ -1,11 +1,13 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/hooks/useI18n'
+import { useAuthorization } from '@/hooks/useAuthorization'
 import { Logo } from '@/components/ui/Logo'
-import { ACCOUNT_NAV, LIBRARY_NAV, PRIMARY_NAV, type NavItem } from './navItems'
+import { ACCOUNT_NAV, ADMIN_NAV, LIBRARY_NAV, PRIMARY_NAV, type NavItem } from './navItems'
 
 function NavSection({ items, title }: { items: NavItem[]; title?: string }) {
   const { t } = useI18n()
+  if (items.length === 0) return null
   return (
     <div className="space-y-1">
       {title ? (
@@ -33,13 +35,20 @@ function NavSection({ items, title }: { items: NavItem[]; title?: string }) {
 }
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { t } = useI18n()
+  const { can } = useAuthorization()
+
+  // التنقل واعٍ بالصلاحيات: لا يرى المستخدم مسارًا لن يستطيع استخدامه.
+  const adminItems = ADMIN_NAV.filter((item) => !item.permission || can(item.permission))
+
   return (
     <nav className="flex h-full flex-col gap-1 overflow-y-auto p-3" onClick={onNavigate}>
       <div className="px-2 pb-3 pt-2">
         <Logo />
       </div>
       <NavSection items={PRIMARY_NAV} />
-      <NavSection items={LIBRARY_NAV} title="المكتبة" />
+      <NavSection items={LIBRARY_NAV} title={t('nav.library')} />
+      <NavSection items={adminItems} title={t('nav.administration')} />
       <div className="mt-auto pt-4">
         <NavSection items={ACCOUNT_NAV} />
       </div>

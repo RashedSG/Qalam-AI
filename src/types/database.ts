@@ -180,3 +180,93 @@ export interface LearningProgress {
   created_at: Timestamp
   updated_at: Timestamp
 }
+
+/* ============================================================================
+ * المرحلة ٢ — المؤسسات والأدوار والصلاحيات
+ * ========================================================================== */
+
+export type OrganizationStatus = 'active' | 'suspended' | 'archived'
+export type MembershipStatus = 'invited' | 'active' | 'inactive'
+export type OrgUnitKind = 'organization' | 'sector' | 'department' | 'section' | 'unit'
+/** ترتيب الاتساع: own ⊂ unit ⊂ descendants ⊂ organization */
+export type PermissionScope = 'own' | 'unit' | 'descendants' | 'organization'
+
+export interface Organization {
+  id: Uuid
+  name: string
+  name_en: string
+  code: string | null
+  status: OrganizationStatus
+  settings: Record<string, unknown>
+  branding: Record<string, unknown>
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export interface OrgUnit {
+  id: Uuid
+  organization_id: Uuid
+  parent_id: Uuid | null
+  code: string | null
+  name_ar: string
+  name_en: string
+  kind: OrgUnitKind
+  /** مسار مادي يُصان بمُشغّل: '/root/parent/self'. لا يُكتب من التطبيق. */
+  path: string
+  depth: number
+  is_active: boolean
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export interface Permission {
+  key: string
+  category: string
+  name_ar: string
+  name_en: string
+}
+
+export interface Role {
+  id: Uuid
+  organization_id: Uuid | null
+  key: string
+  name_ar: string
+  name_en: string
+  description_ar: string
+  is_system: boolean
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export interface RolePermission {
+  role_id: Uuid
+  permission_key: string
+  scope: PermissionScope
+}
+
+export interface Membership {
+  id: Uuid
+  organization_id: Uuid
+  user_id: Uuid
+  org_unit_id: Uuid | null
+  status: MembershipStatus
+  job_title: string
+  invited_by: Uuid | null
+  joined_at: Timestamp
+  deactivated_at: Timestamp | null
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export interface AuditEntry {
+  id: number
+  organization_id: Uuid | null
+  actor_id: Uuid | null
+  action: string
+  entity_type: string
+  entity_id: Uuid | null
+  previous_status: string | null
+  new_status: string | null
+  metadata: Record<string, unknown>
+  created_at: Timestamp
+}

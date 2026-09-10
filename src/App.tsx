@@ -9,7 +9,12 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { ErrorBoundary } from '@/components/layout/ErrorBoundary'
 import { ConfigGate } from '@/components/layout/ConfigGate'
 import { AppShell } from '@/components/layout/AppShell'
-import { RedirectIfAuthenticated, RequireAuth, RequireOnboarding } from '@/components/layout/Guards'
+import {
+  RedirectIfAuthenticated,
+  RequireAuth,
+  RequireOnboarding,
+  RequirePermission,
+} from '@/components/layout/Guards'
 import { Spinner } from '@/components/ui/Spinner'
 
 // صفحات عامة — تُحمّل مباشرة (أول انطباع سريع)
@@ -36,6 +41,11 @@ const CorrespondenceDetailPage = lazy(() => import('@/pages/CorrespondenceDetail
 const FavoritesPage = lazy(() => import('@/pages/FavoritesPage'))
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+const OrganizationPage = lazy(() => import('@/pages/organization/OrganizationPage'))
+const StructurePage = lazy(() => import('@/pages/organization/StructurePage'))
+const UsersPage = lazy(() => import('@/pages/organization/UsersPage'))
+const RolesPage = lazy(() => import('@/pages/organization/RolesPage'))
+const AuditPage = lazy(() => import('@/pages/organization/AuditPage'))
 
 function PageLoader() {
   return (
@@ -87,6 +97,21 @@ export default function App() {
                               <Route path="/favorites" element={<FavoritesPage />} />
                               <Route path="/profile" element={<ProfilePage />} />
                               <Route path="/settings" element={<SettingsPage />} />
+
+                              {/* الإدارة — الحارس يخفي الصفحة، وRLS يمنع البيانات. */}
+                              <Route element={<RequirePermission permission="organization.manage" scope="organization" />}>
+                                <Route path="/organization" element={<OrganizationPage />} />
+                                <Route path="/organization/structure" element={<StructurePage />} />
+                              </Route>
+                              <Route element={<RequirePermission permission="users.manage" scope="organization" />}>
+                                <Route path="/organization/users" element={<UsersPage />} />
+                              </Route>
+                              <Route element={<RequirePermission permission="roles.manage" scope="organization" />}>
+                                <Route path="/organization/roles" element={<RolesPage />} />
+                              </Route>
+                              <Route element={<RequirePermission permission="audit.view" scope="organization" />}>
+                                <Route path="/organization/audit" element={<AuditPage />} />
+                              </Route>
                             </Route>
                           </Route>
                         </Route>
