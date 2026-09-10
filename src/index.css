@@ -119,13 +119,30 @@
 
 /* الترويسة والتذييل مخفيان على الشاشة، ويظهران في المعاينة وفي الطباعة. */
 .q-print-header,
-.q-print-footer {
+.q-print-footer,
+.q-print-signature {
   display: none;
 }
 
 .q-preview .q-print-header,
-.q-preview .q-print-footer {
+.q-preview .q-print-footer,
+.q-preview .q-print-signature {
   display: block;
+}
+
+/* المعاينة على الشاشة تُحاكي الورق: خطٌّ تحت الترويسة وفوق التذييل، وإلا
+   بدت الترويسة ملتصقة بالنص وخرجت المعاينة مخالفةً لما يُطبع. */
+.q-preview .q-print-header {
+  border-bottom: 1.5px solid currentColor;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+}
+
+.q-preview .q-print-footer {
+  border-top: 1px solid currentColor;
+  padding-top: 8px;
+  margin-top: 24px;
+  font-size: 0.75rem;
 }
 
 @media print {
@@ -158,8 +175,36 @@
   }
 
   .q-print-document .q-print-header,
-  .q-print-document .q-print-footer {
+  .q-print-document .q-print-footer,
+  .q-print-document .q-print-signature {
     display: block !important;
+  }
+
+  /* كتلة التوقيع لا تُقتطع بين صفحتين: توقيعٌ في صفحة واسمٌ في أخرى
+     يُفسد الوثيقة الرسمية. */
+  .q-print-signature {
+    margin-top: 28pt;
+    margin-inline-start: auto;
+    width: 45%;
+    text-align: center;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .q-print-signed-note {
+    margin-top: 20pt;
+    padding-top: 4pt;
+    border-top: 0.75pt solid #000;
+  }
+
+  /* رمز التحقق ٤٨ محرفًا: بلا كسرٍ صريح يمتدّ خارج هامش الورقة. */
+  .q-print-code {
+    font-size: 8pt;
+    word-break: break-all;
+  }
+
+  .q-print-qr-caption {
+    font-size: 7pt;
   }
 
   .q-print-header {

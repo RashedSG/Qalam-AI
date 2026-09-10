@@ -514,4 +514,55 @@ suite('إعدادات المراسلة المؤسسية', () => {
       expect(meta.rows[0].prosecdef).toBe(false)
     })
   })
+
+  /* ==================== دليل الأعضاء ==================== */
+
+  describe('دليل أعضاء المؤسسة', () => {
+    beforeEach(async () => {
+      await db.query(
+        `insert into public.profiles (id, full_name, email) values ($1,'أحمد المدير',$3),($2,'بدر الموظف',$4)
+         on conflict (id) do update set full_name = excluded.full_name`,
+        [ADMIN, STAFF, 'admin@p8.test', 'staff@p8.test'],
+      )
+    })
+
+    it('⚠️ الأسماء لا تُقرأ من `profiles` — الربط عليه يُسقط كل عضو سوى نفسك', async () => {
+      // هذا هو الخلل الذي كان يجعل شاشة «المستخدمون» تعرض صفًّا واحدًا.
+      const direct = await asUser(ADMIN, () =>
+        db.query('select count(*)::int as n from public.profiles where id = any($1)', [[ADMIN, STAFF]]),
+      )
+      expect(Number(direct.rows[0].n), 'profiles محميّ بـauth.uid() = id').toBe(1)
+
+      const viaDirectory = await asUser(ADMIN, () =>
+        db.query('select count(*)::int as n from public.org_member_directory($1)', [id.orgA]),
+      )
+      expect(Number(viaDirectory.rows[0].n), 'والدليل يرى الأعضاء').toBeGreaterThan(1)
+    })
+
+    it('كل عضو يرى أسماء زملائه', async () => {
+      const seen = await asUser(STAFF, () =>
+        db.query('select full_name from public.org_member_directory($1) order by 1', [id.orgA]),
+      )
+      expect(seen.rows.map((r) => r.full_name)).toContain('أحمد المدير')
+    })
+
+    it('⚠️ والبريد محجوب عمّن لا يملك users.manage', async () => {
+      const asStaff = await asUser(STAFF, () =>
+        db.query('select email from public.org_member_directory($1)', [id.orgA]),
+      )
+      expect(asStaff.rows.every((r) => r.email === null), 'البريد بيانٌ شخصي').toBe(true)
+
+      const asAdmin = await asUser(ADMIN, () =>
+        db.query('select email from public.org_member_directory($1) where email is not null', [id.orgA]),
+      )
+      expect(asAdmin.rows.length, 'ومن يدير المستخدمين يحتاجه').toBeGreaterThan(0)
+    })
+
+    it('⚠️ ولا يرى غريبٌ عن المؤسسة صفًّا واحدًا', async () => {
+      const outsider = await asUser(OUTSIDER, () =>
+        db.query('select count(*)::int as n from public.org_member_directory($1)', [id.orgA]),
+      )
+      expect(Number(outsider.rows[0].n)).toBe(0)
+    })
+  })
 })

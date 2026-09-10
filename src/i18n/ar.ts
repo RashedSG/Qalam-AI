@@ -733,6 +733,9 @@ export const ar = {
   'doc.verifyPrivacy': 'التحقق يؤكد صدور الوثيقة ورقمها وتاريخها فقط. لا يكشف موضوعها ولا محتواها ولا أطرافها.',
   'doc.verifyLink': 'رابط التحقق',
   'doc.qrAlt': 'رمز استجابة سريعة لرابط التحقق',
+  'doc.scanToVerify': 'امسح للتحقق',
+  'doc.signedElectronically': 'وُقّعت إلكترونيًّا',
+  'doc.signerUnknown': 'موقّع معتمد',
   'doc.printPreview': 'معاينة الوثيقة',
 
   // هوية المؤسسة

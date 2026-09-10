@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Printer, ShieldCheck } from 'lucide-react'
 import { Card, CardBody, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { useI18n } from '@/hooks/useI18n'
+import { listSignatures } from '@/services/db/workflow'
+import { listMemberDirectory } from '@/services/db/organization'
 import { PrintableDocument } from './PrintableDocument'
 import type { Correspondence, Organization } from '@/types/database'
 
@@ -19,6 +22,33 @@ export function DocumentPanel({
 }) {
   const { t } = useI18n()
   const [preview, setPreview] = useState(false)
+
+  const signatures = useQuery({
+    queryKey: ['signatures', correspondence.id],
+    queryFn: () => listSignatures(correspondence.id),
+  })
+  const directory = useQuery({
+    queryKey: ['member-directory', correspondence.organization_id],
+    queryFn: () => listMemberDirectory(correspondence.organization_id!),
+    enabled: Boolean(correspondence.organization_id),
+  })
+
+  /**
+   * التوقيع المعروض على الوثيقة.
+   *
+   * ⚠️ الاسم يأتي من دليل الأعضاء لا من `profiles`: الأخير محميّ بـ
+   * `auth.uid() = id`، فلا أحد يقرأ اسم غيره منه — وكانت النتيجة وثيقةً موقّعة
+   * بلا اسم موقّع.
+   */
+  const signature = useMemo(() => {
+    const latest = (signatures.data ?? [])[0]
+    if (!latest) return null
+    const signer = (directory.data ?? []).find((entry) => entry.user_id === latest.signer_id)
+    return {
+      name: signer?.full_name ?? t('doc.signerUnknown'),
+      signedAt: latest.signed_at,
+    }
+  }, [signatures.data, directory.data, t])
 
   const issued =
     ISSUED_STATUSES.has(correspondence.current_status ?? '') && Boolean(correspondence.reference_number)
@@ -70,6 +100,8 @@ export function DocumentPanel({
               correspondence={correspondence}
               organization={organization}
               verifyUrl={verifyUrl}
+              verifyCode={correspondence.verification_token ?? null}
+              signature={signature}
               preview
             />
           </div>
@@ -84,6 +116,8 @@ export function DocumentPanel({
             correspondence={correspondence}
             organization={organization}
             verifyUrl={verifyUrl}
+            verifyCode={correspondence.verification_token ?? null}
+            signature={signature}
           />
         </div>,
         document.body,

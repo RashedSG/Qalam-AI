@@ -104,24 +104,55 @@ export interface MemberRow extends Membership {
   roles: Array<{ id: string; key: string; name_ar: string }>
 }
 
+export interface DirectoryEntry {
+  user_id: string
+  full_name: string
+  /** فارغ لمن لا يملك users.manage — البريد بيانٌ شخصي لا يحتاجه كل عضو. */
+  email: string | null
+}
+
+/** أسماء أعضاء المؤسسة. عبر RPC لا ربطًا على `profiles`. */
+export async function listMemberDirectory(organizationId: string): Promise<DirectoryEntry[]> {
+  const { data, error } = await supabase.rpc('org_member_directory', {
+    p_organization_id: organizationId,
+  })
+  if (error) throw error
+  return (data ?? []) as DirectoryEntry[]
+}
+
+/**
+ * أعضاء المؤسسة بأسمائهم وأدوارهم.
+ *
+ * ⚠️ الأسماء تأتي من `org_member_directory` لا من ربطٍ على `profiles`.
+ * `profiles` محميّ بـ`auth.uid() = id`، والربط الداخلي عليه كان **يُسقط كل
+ * عضو سوى المستخدم نفسه** — فتعرض الشاشة صفًّا واحدًا مهما بلغ عدد الأعضاء.
+ * لا تُعِد الربط.
+ */
 export async function listMembers(organizationId: string): Promise<MemberRow[]> {
-  const { data, error } = await supabase
-    .from('memberships')
-    .select('*, profile:profiles!inner(full_name, email), membership_roles(role:roles(id, key, name_ar))')
-    .eq('organization_id', organizationId)
-    .order('joined_at', { ascending: true })
+  const [{ data, error }, directory] = await Promise.all([
+    supabase
+      .from('memberships')
+      .select('*, membership_roles(role:roles(id, key, name_ar))')
+      .eq('organization_id', organizationId)
+      .order('joined_at', { ascending: true }),
+    listMemberDirectory(organizationId),
+  ])
   if (error) throw error
 
+  const names = new Map(directory.map((entry) => [entry.user_id, entry]))
+
   type Raw = Membership & {
-    profile: { full_name: string; email: string } | null
     membership_roles: Array<{ role: { id: string; key: string; name_ar: string } | null }> | null
   }
 
-  return ((data ?? []) as Raw[]).map((row) => ({
-    ...row,
-    profile: row.profile,
-    roles: (row.membership_roles ?? []).flatMap((mr) => (mr.role ? [mr.role] : [])),
-  }))
+  return ((data ?? []) as Raw[]).map((row) => {
+    const entry = names.get(row.user_id)
+    return {
+      ...row,
+      profile: entry ? { full_name: entry.full_name, email: entry.email ?? '' } : null,
+      roles: (row.membership_roles ?? []).flatMap((mr) => (mr.role ? [mr.role] : [])),
+    }
+  })
 }
 
 export async function updateMembership(

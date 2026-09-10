@@ -713,6 +713,9 @@ export const en: Record<TranslationKey, string> = {
   'doc.verifyPrivacy': 'Verification confirms only that the document was issued, its number and its date. It reveals no subject, content or parties.',
   'doc.verifyLink': 'Verification link',
   'doc.qrAlt': 'QR code linking to the verification page',
+  'doc.scanToVerify': 'Scan to verify',
+  'doc.signedElectronically': 'Signed electronically',
+  'doc.signerUnknown': 'Authorized signatory',
   'doc.printPreview': 'Document preview',
 
   // Organization identity
