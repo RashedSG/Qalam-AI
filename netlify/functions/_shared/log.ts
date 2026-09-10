@@ -26,6 +26,11 @@ export type LogEvent =
   | 'ai.completed'
   | 'ai.quota_check_failed'
   | 'ai.usage_record_failed'
+  | 'voice.invalid_format'
+  | 'voice.too_large'
+  | 'voice.transcribed'
+  | 'voice.upstream_error'
+  | 'voice.timeout'
 
 type Scalar = string | number | boolean | null | undefined
 

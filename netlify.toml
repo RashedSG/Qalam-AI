@@ -40,9 +40,13 @@
 # بيانات إلى أي مستضيف آخر. لتضييقه إلى مشروع واحد يلزم توليد ملف _headers
 # وقت البناء — موثّق في docs/security.md.
 #
-# الميكروفون (المرحلة ٦ — Voice AI): غير مسموح الآن عن قصد. تفعيله لاحقًا
-# = تغيير microphone=() إلى microphone=(self) في Permissions-Policy أدناه،
-# ولا يحتاج أي تغيير في الـCSP لأن الصوت لا يضيف مستضيفًا خارجيًا.
+# الميكروفون (المرحلة ٦ — Voice AI): مسموح لأصل الموقع وحده — microphone=(self).
+# لا إطار ولا نطاق فرعي ولا طرف ثالث. والصفحة لا تطلب الصلاحية عند التحميل،
+# بل عند ضغط زر الصوت فقط.
+#
+# لم تتغيّر الـCSP: الصوت لا يضيف مستضيفًا خارجيًا — التحويل النصي يمر بدالة
+# على نفس الأصل، والنطق يتم في المتصفح بلا شبكة. media-src يسمح بـblob:
+# لتشغيل ما يُنتجه المتصفح محليًا.
 # =============================================================================
 [[headers]]
   for = "/*"
@@ -66,7 +70,7 @@ upgrade-insecure-requests"""
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+    Permissions-Policy = "camera=(), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()"
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
     Cross-Origin-Opener-Policy = "same-origin"
     X-Permitted-Cross-Domain-Policies = "none"

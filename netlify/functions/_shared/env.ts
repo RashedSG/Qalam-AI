@@ -7,6 +7,8 @@ export interface ServerEnv {
   supabaseAnonKey: string
   /** سقف زمني لكل استدعاء خارجي. قابل للضبط دون تعديل كود. */
   aiTimeoutMs: number
+  /** نموذج تحويل الصوت إلى نص. */
+  whisperModel: string
 }
 
 const DEFAULT_AI_TIMEOUT_MS = 45_000
@@ -43,5 +45,6 @@ export function readEnv(): ServerEnv {
     supabaseUrl: supabaseUrl.replace(/\/$/, ''),
     supabaseAnonKey,
     aiTimeoutMs: readTimeoutMs(process.env.AI_TIMEOUT_MS),
+    whisperModel: process.env.WHISPER_MODEL || 'whisper-1',
   }
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AlertCircle, ListChecks, RotateCcw, Search, Sparkles } from 'lucide-react'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -32,12 +33,16 @@ export default function ReplyPage() {
   const userContext = useUserContext()
 
   // لقطة العمل السابقة تُقرأ مرة واحدة عند التركيب.
+  // المساعد الصوتي يمرّر ما قاله المستخدم هنا، فلا يضيع كلامه عند التنقّل.
+  const location = useLocation()
+  const seededIncoming = (location.state as { incomingText?: string } | null)?.incomingText ?? ''
+
   const [restored] = useState<ReplySnapshot | null>(() => loadSnapshot<ReplySnapshot>('reply'))
   const [showRestoredNotice, setShowRestoredNotice] = useState(
     () => Boolean(restored && isReplySnapshotUseful(restored)),
   )
 
-  const [incomingText, setIncomingText] = useState(restored?.incomingText ?? '')
+  const [incomingText, setIncomingText] = useState(seededIncoming || restored?.incomingText || '')
   const [replyLanguage, setReplyLanguage] = useState<Language>(
     restored?.replyLanguage ?? userContext?.preferredLanguage ?? 'ar',
   )

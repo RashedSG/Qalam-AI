@@ -187,9 +187,11 @@ describe('رؤوس الأمان', () => {
     }
   })
 
-  it('الميكروفون مُغلق الآن — يُفتح صراحةً في المرحلة ٦', () => {
+  it('الميكروفون مفتوح لأصل الموقع وحده — والكاميرا مغلقة', () => {
+    // فُتح في المرحلة ٦ للمساعد الصوتي. (self) لا (*) ولا نطاق طرف ثالث.
     const permissions = netlifyToml.match(/Permissions-Policy = "([^"]*)"/)?.[1] ?? ''
-    expect(permissions).toMatch(/microphone=\(\)/)
+    expect(permissions).toMatch(/microphone=\(self\)/)
+    expect(permissions).not.toMatch(/microphone=\(\*\)/)
     expect(permissions).toMatch(/camera=\(\)/)
   })
 
@@ -278,5 +280,98 @@ describe('وكيل قلم — الحدود البنيوية', () => {
     const client = readFileSync(join(root, 'src/services/ai/agent.ts'), 'utf8')
     expect(client).toMatch(/\/\.netlify\/functions/)
     expect(stripComments(client)).not.toMatch(/api\.openai\.com/)
+  })
+})
+
+describe('المساعد الصوتي — الخصوصية والحدود', () => {
+  const voiceFn = readFileSync(join(root, 'netlify/functions/voice.ts'), 'utf8')
+  const recorder = readFileSync(join(root, 'src/services/voice/recorder.ts'), 'utf8')
+  const session = readFileSync(join(root, 'src/hooks/useVoiceSession.ts'), 'utf8')
+  const intents = readFileSync(join(root, 'src/services/voice/intents.ts'), 'utf8')
+
+  it('الصوت الخام لا يُخزَّن في أي موضع', () => {
+    const server = stripComments(voiceFn)
+    // لا Storage ولا قاعدة بيانات ولا ملف مؤقت.
+    expect(server).not.toMatch(/storage|bucket|upload/i)
+    expect(server).not.toMatch(/insert into|\.from\(['"]/)
+    expect(server).not.toMatch(/writeFile|createWriteStream|\/tmp\//)
+
+    const client = stripComments(recorder)
+    expect(client, 'لا تخزين محلي للصوت').not.toMatch(/localStorage|sessionStorage|indexedDB/i)
+  })
+
+  it('لا يُسجَّل النص المنطوق في سجل الخادم', () => {
+    const start = voiceFn.indexOf("log.info('voice.transcribed'")
+    const logCall = voiceFn.slice(start, voiceFn.indexOf('})', start) + 2)
+    expect(logCall).toMatch(/durationMs/)
+    for (const forbidden of ['text', 'audio', 'payload']) {
+      expect(logCall, `السجل يجب ألا يحمل ${forbidden}`).not.toContain(`${forbidden}:`)
+    }
+  })
+
+  it('جسم خطأ المزوّد لا يُقرأ — قد يحمل صدى ما نُطق', () => {
+    const failure = voiceFn.slice(voiceFn.indexOf('if (!res.ok)'), voiceFn.indexOf('const data ='))
+    expect(failure).not.toMatch(/res\.(text|json)\(\)/)
+  })
+
+  it('الصلاحية تُطلب عند الضغط لا عند تحميل الصفحة', () => {
+    // فحص الدعم (typeof …getUserMedia === 'function') لا يطلب شيئًا؛
+    // الاستدعاء الفعلي هو ما يفتح نافذة الإذن. نفحص الاستدعاء لا الذِكر.
+    const calls = [...recorder.matchAll(/getUserMedia\(/g)]
+    expect(calls, 'استدعاء واحد فقط').toHaveLength(1)
+
+    const implementation = recorder.slice(recorder.indexOf('export async function startRecording'))
+    expect(implementation).toMatch(/getUserMedia\(/)
+  })
+
+  it('رفض الصلاحية يُصنَّف ولا يُبتلع', () => {
+    expect(recorder).toMatch(/NotAllowedError/)
+    expect(recorder).toMatch(/permission_denied/)
+    expect(recorder).toMatch(/no_microphone/)
+  })
+
+  it('الميكروفون يُحرَّر في كل مسار — نجاح وإلغاء', () => {
+    expect(recorder).toMatch(/const release = \(\) => \{/)
+    // نبدأ من التنفيذ لا من تعريف الواجهة: كلاهما يحوي «stop: ()».
+    const implementation = recorder.slice(recorder.indexOf('const release'))
+    const stopBlock = implementation.slice(
+      implementation.indexOf('stop: ()'),
+      implementation.indexOf('cancel: ()'),
+    )
+    expect(stopBlock, 'مسار الإنهاء يُحرّر الميكروفون').toMatch(/release\(\)/)
+    const cancelBlock = implementation.slice(implementation.indexOf('cancel: ()'))
+    expect(cancelBlock, 'ومسار الإلغاء كذلك').toMatch(/release\(\)/)
+  })
+
+  it('بدء الاستماع يُسكت النطق — لا يُسجَّل صوت المساعد', () => {
+    const start = session.slice(session.indexOf('const startListening'))
+    const body = start.slice(0, start.indexOf('setState(\'listening\')'))
+    expect(body).toMatch(/getTts\(\)\.stop\(\)/)
+  })
+
+  it('الأمر الحساس لا يصل الوكيل', () => {
+    const sensitive = session.slice(session.indexOf("if (intent.kind === 'sensitive')"))
+    const block = sensitive.slice(0, sensitive.indexOf('return'))
+    expect(block, 'لا استدعاء للوكيل في مسار الأمر الحساس').not.toMatch(/askAgent/)
+  })
+
+  it('تصنيف النيّة تنقّل لا فعل', () => {
+    // لا استدعاء إجراء ولا خدمة كتابة في ملف النيّات.
+    expect(stripComments(intents)).not.toMatch(/supabase|rpc\(|fetch\(/)
+    expect(intents).toMatch(/تنقّل\*\* لا إلى \*\*فعل/)
+  })
+
+  it('الميكروفون مسموح لأصل الموقع وحده', () => {
+    const permissions = netlifyToml.match(/Permissions-Policy = "([^"]*)"/)?.[1] ?? ''
+    expect(permissions).toMatch(/microphone=\(self\)/)
+    expect(permissions, 'الكاميرا تبقى مغلقة').toMatch(/camera=\(\)/)
+  })
+
+  it('الصوت لا يضيف مستضيفًا خارجيًا للـCSP', () => {
+    const csp = netlifyToml.match(/Content-Security-Policy = """([\s\S]*?)"""/)?.[1].replace(/\\\n/g, '') ?? ''
+    const mediaSrc = csp.match(/media-src([^;]*)/)?.[1] ?? ''
+    expect(mediaSrc).toMatch(/'self'/)
+    expect(mediaSrc).toMatch(/blob:/)
+    expect(mediaSrc, 'لا مستضيف خارجي للوسائط').not.toMatch(/https?:\/\//)
   })
 })

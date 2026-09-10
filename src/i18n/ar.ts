@@ -612,6 +612,27 @@ export const ar = {
   'agent.ex1': 'شو المطلوب مني هذا الأسبوع؟',
   'agent.ex2': 'طلّع لي المراسلات السابقة عن الميزانية',
   'agent.ex3': 'لخّص لي آخر كتاب وارد',
+
+  // المساعد الصوتي
+  'voice.button': 'تحدّث مع مساعد قلم',
+  'voice.state.idle': 'اضغط للتحدث',
+  'voice.state.listening': 'أستمع…',
+  'voice.state.processing': 'أفهم ما قلت…',
+  'voice.state.speaking': 'أتحدث…',
+  'voice.state.error': 'حدث خطأ',
+  'voice.stopListening': 'إنهاء الكلام',
+  'voice.cancel': 'إلغاء',
+  'voice.stopSpeaking': 'إيقاف الصوت',
+  'voice.mute': 'كتم الصوت',
+  'voice.unmute': 'تشغيل الصوت',
+  'voice.notSupported': 'متصفحك لا يدعم التسجيل الصوتي. استخدم الكتابة بدلًا منه.',
+  'voice.youSaid': 'قلت',
+  'voice.blocked': 'لم يُنفَّذ — يحتاج تأكيدك',
+  'voice.privacy': 'لا يُحفظ تسجيلك الصوتي في أي مكان. يُحوَّل إلى نص ثم يُهمَل.',
+  'voice.privacyOnDevice': 'النطق يتم في جهازك ولا يغادره.',
+  'voice.privacyServer': 'يُحوَّل الصوت إلى نص عبر خادم قلم.',
+  'voice.hint': 'اضغط زر الميكروفون وتحدّث، ثم اضغط «إنهاء الكلام».',
+  'voice.recording': 'التسجيل جارٍ',
 } as const
 
 export type TranslationKey = keyof typeof ar

@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { EmptyState } from '@/components/ui/States'
 import { useI18n } from '@/hooks/useI18n'
 import { useAuth } from '@/hooks/useAuth'
+import { VoicePanel } from '@/features/voice/VoicePanel'
 import { askAgent, type AgentCitation, type AgentReply, type AgentTurn } from '@/services/ai/agent'
 import { AiError } from '@/services/ai'
 import type { TranslationKey } from '@/i18n'
@@ -129,6 +130,8 @@ export default function AssistantPage() {
       <p className="q-muted rounded-xl bg-[rgb(var(--q-surface-2))] px-3 py-2 text-xs leading-6">
         {t('agent.limits')}
       </p>
+
+      <VoicePanel />
 
       {injectionSeen ? (
         <div
