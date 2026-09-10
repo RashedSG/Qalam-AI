@@ -46,6 +46,7 @@ const StructurePage = lazy(() => import('@/pages/organization/StructurePage'))
 const UsersPage = lazy(() => import('@/pages/organization/UsersPage'))
 const RolesPage = lazy(() => import('@/pages/organization/RolesPage'))
 const AuditPage = lazy(() => import('@/pages/organization/AuditPage'))
+const CorrespondenceSettingsPage = lazy(() => import('@/pages/organization/CorrespondenceSettingsPage'))
 const InboxPage = lazy(() => import('@/pages/enterprise/InboxPage'))
 const OutboxPage = lazy(() => import('@/pages/enterprise/OutboxPage'))
 const MyWorkPage = lazy(() => import('@/pages/enterprise/MyWorkPage'))
@@ -123,6 +124,10 @@ export default function App() {
                               <Route element={<RequirePermission permission="organization.manage" scope="organization" />}>
                                 <Route path="/organization" element={<OrganizationPage />} />
                                 <Route path="/organization/structure" element={<StructurePage />} />
+                                <Route
+                                  path="/organization/correspondence"
+                                  element={<CorrespondenceSettingsPage />}
+                                />
                               </Route>
                               <Route element={<RequirePermission permission="users.manage" scope="organization" />}>
                                 <Route path="/organization/users" element={<UsersPage />} />

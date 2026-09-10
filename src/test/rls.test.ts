@@ -21,6 +21,7 @@ const workflow = readFileSync(join(root, 'supabase/migrations/0018_workflow.sql'
 const delegation = readFileSync(join(root, 'supabase/migrations/0019_delegation.sql'), 'utf8')
 const rlsPhase4 = readFileSync(join(root, 'supabase/migrations/0020_rls_phase4.sql'), 'utf8')
 const phase7 = readFileSync(join(root, 'supabase/migrations/0022_enterprise_readiness.sql'), 'utf8')
+const settings = readFileSync(join(root, 'supabase/migrations/0023_correspondence_settings.sql'), 'utf8')
 
 /** كل الجداول التي يجب أن تكون محمية بـ RLS. */
 const TABLES = [
@@ -814,5 +815,107 @@ describe('المرحلة ٧ — الجاهزية المؤسسية', () => {
     expect(select.slice(0, select.indexOf(';')), 'صاحب القالب يراه دائمًا').toMatch(
       /user_id = \(select auth\.uid\(\)\)/,
     )
+  })
+})
+
+describe('إعدادات المراسلة المؤسسية — الحراسة', () => {
+  const body = (name: string) => {
+    const start = settings.indexOf(`function public.${name}(`)
+    expect(start, `${name} غير موجودة`).toBeGreaterThan(-1)
+    return settings.slice(start, settings.indexOf('$$;', start))
+  }
+
+  const GUARDED = [
+    'update_reference_policy',
+    'upsert_classification_level',
+    'delete_classification_level',
+    'reorder_classification_levels',
+  ]
+
+  it('كل دالة إعداد تفحص organization.manage بنفسها', () => {
+    // الدوال definer فتتجاوز RLS بطبعها؛ البوابة فيها لا حولها.
+    for (const name of GUARDED) {
+      const impl = body(name)
+      expect(impl, `${name} definer`).toMatch(/security definer/)
+      expect(impl, `${name} بلا بوابة صلاحية`).toMatch(
+        /has_permission\('organization\.manage', p_organization_id\)/,
+      )
+      expect(impl, `${name} بلا فحص هوية`).toMatch(/auth\.uid\(\) is null/)
+      expect(impl, `${name} بلا search_path`).toMatch(/set search_path = public/)
+    }
+  })
+
+  it('لا دالة إعداد مُنحت لـanon', () => {
+    for (const name of GUARDED) {
+      const grants = [...settings.matchAll(new RegExp(`grant execute on function public\\.${name}[^;]*;`, 'g'))]
+      expect(grants.length, name).toBeGreaterThan(0)
+      for (const [line] of grants) expect(line, name).not.toMatch(/\banon\b/)
+    }
+  })
+
+  it('⚠️ الصيغة تُلزم {SEQ} — وقيدٌ على الجدول يمنع تخطّي الدالة', () => {
+    const impl = body('validate_reference_format')
+    expect(impl).toMatch(/position\('\{SEQ\}' in p_format\) = 0/)
+    expect(impl).toMatch(/missing_seq/)
+    expect(settings, 'حاجزٌ على الجدول لا في الدالة وحدها').toMatch(
+      /add constraint reference_policies_format_check\s+check \(cardinality\(public\.validate_reference_format\(format\)\) = 0\)/,
+    )
+  })
+
+  it('⚠️ المُصدِر يتعافى من تصادم الأرقام بحدٍّ أعلى للمحاولات', () => {
+    const impl = body('issue_reference_number')
+    expect(impl, 'حلقة إعادة محاولة').toMatch(/attempts := attempts \+ 1/)
+    expect(impl, 'يتحقّق أن الرقم غير مستعمَل قبل الاعتماد').toMatch(
+      /exit when not exists \(/,
+    )
+    expect(impl, 'حدٌّ أعلى: الدوران بلا حدّ يُخفي الخلل').toMatch(/attempts >= 50/)
+  })
+
+  it('⚠️ تغيير الرتبة يُسجَّل مع اتجاه الأثر', () => {
+    const impl = body('reorder_classification_levels')
+    expect(impl).toMatch(/record_audit\(\s*\n?\s*'classification\.rank_changed'/)
+    expect(impl, 'اتجاه الأثر يُسجَّل: التخفيض يكشف').toMatch(/'widens_access', item\.new_rank < item\.old_rank/)
+    expect(impl).toMatch(/'affected_correspondence'/)
+  })
+
+  it('قيد الرتبة مؤجَّل — وإلا استحالت إعادة الترتيب', () => {
+    expect(settings).toMatch(/unique \(organization_id, rank\) deferrable initially immediate/)
+    expect(body('reorder_classification_levels')).toMatch(
+      /set constraints public\.classification_levels_rank_key deferred/,
+    )
+  })
+
+  it('المفتاح غير قابل للتغيير بمُشغّل لا بالواجهة', () => {
+    expect(settings).toMatch(/create trigger classification_key_immutable_trg\s+before update of key/)
+    expect(body('classification_key_immutable')).toMatch(/key is immutable/)
+  })
+
+  it('الحذف يُرفض برسالة تقول العدد، ولا تبقى مؤسسة بلا مستوى', () => {
+    const impl = body('delete_classification_level')
+    expect(impl).toMatch(/is used by % correspondence/)
+    expect(impl).toMatch(/at least one classification level/)
+  })
+
+  it('حساب الأثر `security invoker` — لا يكشف ما لا يراه المستدعي', () => {
+    const impl = body('classification_impact')
+    expect(impl).toMatch(/security invoker/)
+    expect(impl).not.toMatch(/security definer/)
+  })
+
+  it('الهجرة إضافية — لا حذف بيانات ولا حذف عمود', () => {
+    const stripped = settings.replace(/--[^\n]*/g, '')
+    expect(stripped).not.toMatch(/drop table/i)
+    expect(stripped).not.toMatch(/drop column/i)
+    expect(stripped).not.toMatch(/truncate/i)
+    // يُسمح بإسقاط فهرس/دالة بالاسم: إحلالٌ مقصود موثَّق في الهجرة.
+    expect(stripped).toMatch(/drop index if exists public\.classification_levels_rank_idx/)
+  })
+
+  it('الواجهة لا تكتب على الجدولين مباشرة — كل تعديل عبر RPC', () => {
+    const service = readFileSync(join(root, 'src/services/db/enterprise.ts'), 'utf8')
+    for (const table of ['classification_levels', 'reference_number_policies']) {
+      const writes = [...service.matchAll(new RegExp(`from\\('${table}'\\)\\s*\\n?\\s*\\.(update|insert|delete|upsert)`, 'g'))]
+      expect(writes.map((m) => m[0]), `${table} يُكتب مباشرة`).toEqual([])
+    }
   })
 })

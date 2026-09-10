@@ -3,6 +3,7 @@ import {
   BookOpen,
   BookMarked,
   Building2,
+  FileCog,
   FileEdit,
   FilePlus2,
   GraduationCap,
@@ -79,6 +80,12 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/organization/structure', labelKey: 'nav.structure', icon: Network, permission: 'organization.manage' },
   { to: '/organization/users', labelKey: 'nav.users', icon: Users, permission: 'users.manage' },
   { to: '/organization/roles', labelKey: 'nav.roles', icon: ShieldCheck, permission: 'roles.manage' },
+  {
+    to: '/organization/correspondence',
+    labelKey: 'nav.corrSettings',
+    icon: FileCog,
+    permission: 'organization.manage',
+  },
   { to: '/organization/audit', labelKey: 'nav.audit', icon: ScrollText, permission: 'audit.view' },
 ]
 

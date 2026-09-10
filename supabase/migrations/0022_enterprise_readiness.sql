@@ -564,9 +564,10 @@ create index if not exists correspondences_search_idx
     ) gin_trgm_ops
   );
 
-create index if not exists correspondences_reference_idx
-  on public.correspondences (organization_id, reference_number)
-  where reference_number is not null;
+-- لا فهرس جديد لرقم المراسلة: 0012 ينشئ `correspondences_reference_idx`
+-- فريدًا على (organization_id, reference_number)، وهو يخدم التصفية بالرقم
+-- كما يخدم منع التكرار. وكان هنا `create index if not exists` بالاسم نفسه —
+-- عبارةٌ لا تفعل شيئًا وتقرأ كأنها تُنشئ فهرسًا غير فريد.
 
 /**
  * بحثٌ وتصفية على المراسلات. كل المعاملات اختيارية، وكل ما يُمرَّر يضيّق.

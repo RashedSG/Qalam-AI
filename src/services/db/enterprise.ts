@@ -52,18 +52,37 @@ export async function getReferencePolicy(organizationId: string): Promise<Refere
   return (data as ReferenceNumberPolicy) ?? null
 }
 
+/**
+ * يضبط سياسة أرقام المراسلات.
+ *
+ * ⚠️ عبر RPC لا كتابةً مباشرة على الجدول: الدالة تتحقّق من الصيغة وتُسجّل
+ * التغيير. وصيغة بلا `{SEQ}` تعطي كل مراسلات السنة الرقم نفسه — فالتحقق
+ * ليس تجميلًا.
+ */
 export async function updateReferencePolicy(
-  id: string,
-  patch: Partial<Pick<ReferenceNumberPolicy, 'format' | 'seq_padding' | 'reset_yearly' | 'per_unit' | 'per_direction'>>,
+  organizationId: string,
+  patch: Pick<ReferenceNumberPolicy, 'format' | 'seq_padding' | 'reset_yearly' | 'per_unit' | 'per_direction'>,
 ): Promise<ReferenceNumberPolicy> {
-  const { data, error } = await supabase
-    .from('reference_number_policies')
-    .update(patch)
-    .eq('id', id)
-    .select('*')
-    .single()
+  const { data, error } = await supabase.rpc('update_reference_policy', {
+    p_organization_id: organizationId,
+    p_format: patch.format,
+    p_seq_padding: patch.seq_padding,
+    p_reset_yearly: patch.reset_yearly,
+    p_per_unit: patch.per_unit,
+    p_per_direction: patch.per_direction,
+  })
   if (error) throw error
   return data as ReferenceNumberPolicy
+}
+
+/** رموز المشكلات كما تعيدها القاعدة — تُترجم في الواجهة. */
+export type ReferenceFormatProblem = string
+
+/** يفحص الصيغة في القاعدة لا في المتصفح: مصدر الحقيقة واحد. */
+export async function validateReferenceFormat(format: string): Promise<ReferenceFormatProblem[]> {
+  const { data, error } = await supabase.rpc('validate_reference_format', { p_format: format })
+  if (error) throw error
+  return (data ?? []) as string[]
 }
 
 /** معاينة الصيغة دون استهلاك رقم من العدّاد. */
@@ -74,6 +93,77 @@ export async function previewReferenceFormat(format: string, padding: number): P
   })
   if (error) throw error
   return (data as string) ?? ''
+}
+
+/* --------------------------- مستويات التصنيف --------------------------- */
+
+export async function upsertClassificationLevel(input: {
+  organizationId: string
+  key: string
+  nameAr: string
+  nameEn: string
+  isDefault: boolean
+}): Promise<ClassificationLevel> {
+  const { data, error } = await supabase.rpc('upsert_classification_level', {
+    p_organization_id: input.organizationId,
+    p_key: input.key,
+    p_name_ar: input.nameAr,
+    p_name_en: input.nameEn,
+    p_is_default: input.isDefault,
+  })
+  if (error) throw error
+  return data as ClassificationLevel
+}
+
+/**
+ * يعيد ترتيب المستويات — الأول أدنى سرية والأخير أشدّها.
+ *
+ * ⚠️ تعديلُ صلاحيات لا تعديلَ عرض: خفضُ مستوى يكشف مراسلاتٍ كانت محجوبة.
+ * القائمة تُرسل كاملة عن قصد؛ الترتيب الجزئي يترك رتبًا متصادمة.
+ */
+export async function reorderClassificationLevels(organizationId: string, keys: string[]): Promise<void> {
+  const { error } = await supabase.rpc('reorder_classification_levels', {
+    p_organization_id: organizationId,
+    p_keys: keys,
+  })
+  if (error) throw error
+}
+
+export async function deleteClassificationLevel(organizationId: string, key: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_classification_level', {
+    p_organization_id: organizationId,
+    p_key: key,
+  })
+  if (error) throw error
+}
+
+export interface ClassificationImpact {
+  correspondence_count: number
+  members_now: number
+  members_after: number
+}
+
+/** أثر رتبةٍ جديدة قبل تنفيذها: كم مراسلة، وكم عضوًا قبل وبعد. */
+export async function getClassificationImpact(
+  organizationId: string,
+  key: string,
+  newRank: number,
+): Promise<ClassificationImpact | null> {
+  const { data, error } = await supabase.rpc('classification_impact', {
+    p_organization_id: organizationId,
+    p_key: key,
+    p_new_rank: newRank,
+  })
+  if (error) throw error
+  const rows = (data ?? []) as ClassificationImpact[]
+  const row = rows[0]
+  if (!row) return null
+  // PostgREST يُسلسل bigint نصًّا — بلا تحويل تفشل كل مقارنة عددية بصمت.
+  return {
+    correspondence_count: Number(row.correspondence_count),
+    members_now: Number(row.members_now),
+    members_after: Number(row.members_after),
+  }
 }
 
 /* ------------------------- الوارد والصادر ------------------------- */
