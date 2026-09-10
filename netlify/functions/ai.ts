@@ -5,16 +5,20 @@
  *
  * ضمانات:
  * - OPENAI_API_KEY لا يغادر الخادم إطلاقًا.
- * - كل طلب يتطلب جلسة Supabase صالحة.
+ * - كل طلب يتطلب جلسة Supabase صالحة (المصادقة قبل أي عمل).
+ * - حد معدّل دائم وذرّي في قاعدة البيانات قبل أي استدعاء خارجي.
+ * - سقف زمني صريح لكل استدعاء خارجي.
  * - كل مدخل يُتحقق منه بـ Zod قبل بناء الـ prompt.
  * - كل مخرج يُتحقق منه بـ Zod، مع إعادة محاولة واحدة آمنة.
- * - لا يُسجَّل محتوى المراسلات في اللوق إطلاقًا (خصوصية).
+ * - لا يدخل السجل أي محتوى مراسلة ولا prompt ولا رسالة مزوّد خام.
  */
 import type { Handler, HandlerEvent } from '@netlify/functions'
 import { ConfigError, readEnv } from './_shared/env'
 import { verifySupabaseUser } from './_shared/auth'
-import { checkRateLimit } from './_shared/rateLimit'
-import { extractJson, runPrompt, UpstreamError } from './_shared/openai'
+import { checkLocalBurst } from './_shared/rateLimit'
+import { classifyUpstreamStatus, log } from './_shared/log'
+import { beginAiRequest, finishAiRequest } from './_shared/usage'
+import { extractJson, runPrompt, TimeoutError, UpstreamError } from './_shared/openai'
 import { TASK_REGISTRY, type TaskName } from './_shared/registry'
 
 const JSON_HEADERS = {
@@ -28,18 +32,27 @@ type ErrorCode =
   | 'unauthenticated'
   | 'rate_limited'
   | 'invalid_response'
+  | 'timeout'
   | 'server'
 
-function fail(status: number, code: ErrorCode, message: string) {
+function fail(status: number, code: ErrorCode, message: string, extraHeaders: Record<string, string> = {}) {
   return {
     statusCode: status,
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, ...extraHeaders },
     body: JSON.stringify({ error: { code, message } }),
   }
 }
 
 function ok(data: unknown) {
   return { statusCode: 200, headers: JSON_HEADERS, body: JSON.stringify({ data }) }
+}
+
+/** رسالة الرفض تختلف بحسب الحد المُتجاوَز — أوضح للمستخدم وبلا تفاصيل داخلية. */
+function rateLimitMessage(reason: string | null): string {
+  if (reason === 'daily_quota') {
+    return 'بلغت سقف الاستخدام اليومي. يمكنك المتابعة غدًا.'
+  }
+  return 'تم تجاوز عدد الطلبات المسموح بها. انتظر قليلًا ثم حاول مجددًا.'
 }
 
 interface RequestBody {
@@ -58,7 +71,8 @@ export const handler: Handler = async (event: HandlerEvent) => {
     env = readEnv()
   } catch (err) {
     if (err instanceof ConfigError) {
-      console.error('[qalam:ai] configuration error:', err.message)
+      // أسماء المتغيرات الناقصة فقط — لا قيم.
+      log.error('ai.config_error', { missing: err.message.replace(/^[^:]*:\s*/, '') })
       return fail(500, 'server', 'الخدمة غير مهيأة بشكل صحيح. راجع إعدادات البيئة.')
     }
     throw err
@@ -68,12 +82,11 @@ export const handler: Handler = async (event: HandlerEvent) => {
   const authHeader = event.headers.authorization ?? event.headers.Authorization
   const user = await verifySupabaseUser(authHeader, env.supabaseUrl, env.supabaseAnonKey)
   if (!user) {
+    log.warn('ai.unauthenticated')
     return fail(401, 'unauthenticated', 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.')
   }
 
-  if (!checkRateLimit(user.id)) {
-    return fail(429, 'rate_limited', 'تم تجاوز عدد الطلبات المسموح بها. انتظر قليلًا ثم حاول مجددًا.')
-  }
+  const accessToken = (authHeader ?? '').replace(/^Bearer\s+/i, '').trim()
 
   /* ---------------------------- تحليل الطلب ----------------------------- */
   let body: RequestBody
@@ -84,25 +97,51 @@ export const handler: Handler = async (event: HandlerEvent) => {
   }
 
   const taskName = body.task as TaskName | undefined
-  if (!taskName || !(taskName in TASK_REGISTRY)) {
+  if (!taskName || !Object.prototype.hasOwnProperty.call(TASK_REGISTRY, taskName)) {
+    log.warn('ai.unknown_task')
     return fail(400, 'bad_request', 'العملية المطلوبة غير معروفة.')
   }
 
   // V1: OpenAI فقط. طبقة التجريد جاهزة لإضافة مزودين آخرين هنا لاحقًا.
-  if (body.provider && body.provider !== 'openai') {
+  const provider = body.provider ?? 'openai'
+  if (provider !== 'openai') {
+    log.warn('ai.unsupported_provider')
     return fail(400, 'bad_request', 'مزود الذكاء الاصطناعي غير مدعوم.')
   }
 
   const definition = TASK_REGISTRY[taskName]
   const inputResult = definition.inputSchema.safeParse(body.payload)
   if (!inputResult.success) {
-    console.error(`[qalam:ai] invalid input for task=${taskName}`) // بدون محتوى المستخدم
+    // اسم المهمة فقط — لا أي جزء من مدخلات المستخدم.
+    log.warn('ai.invalid_input', { task: taskName })
     return fail(400, 'bad_request', 'البيانات المُرسلة غير مكتملة أو غير صالحة.')
+  }
+
+  /* ---------------------------- حد المعدّل ----------------------------- */
+  // حاجز محلي رخيص أولًا، ثم الحد الدائم الذرّي في القاعدة.
+  if (!checkLocalBurst(user.id)) {
+    log.warn('ai.rate_limited', { task: taskName, reason: 'local_burst' })
+    return fail(429, 'rate_limited', rateLimitMessage(null), { 'Retry-After': '10' })
+  }
+
+  const rpcCtx = {
+    supabaseUrl: env.supabaseUrl,
+    supabaseAnonKey: env.supabaseAnonKey,
+    accessToken,
+  }
+
+  const quota = await beginAiRequest(rpcCtx, taskName, provider, env.openaiModel)
+  if (!quota.allowed) {
+    log.warn('ai.rate_limited', { task: taskName, reason: quota.reason })
+    return fail(429, 'rate_limited', rateLimitMessage(quota.reason), {
+      'Retry-After': String(quota.retryAfterSeconds),
+    })
   }
 
   /* --------------------------- تنفيذ مع إعادة محاولة --------------------- */
   const build = definition.build as (input: unknown) => ReturnType<typeof definition.build>
   const spec = build(inputResult.data)
+  const startedAt = Date.now()
 
   const attempt = async (strict: boolean) => {
     const effectiveSpec = strict
@@ -112,36 +151,83 @@ export const handler: Handler = async (event: HandlerEvent) => {
           system: `${spec.system}\n\nتنبيه: المحاولة السابقة أنتجت JSON غير صالح. أعد الإجابة بكائن JSON صالح فقط، بلا أي نص إضافي.`,
         }
       : spec
-    const raw = await runPrompt(effectiveSpec, env.openaiApiKey, env.openaiModel)
-    return definition.outputSchema.safeParse(extractJson(raw))
+    const { content, usage } = await runPrompt(effectiveSpec, env.openaiApiKey, env.openaiModel, {
+      timeoutMs: env.aiTimeoutMs,
+    })
+    return { parsed: definition.outputSchema.safeParse(extractJson(content)), usage }
+  }
+
+  /** يحسم صف التتبّع ثم يعيد استجابة الخطأ — حتى لا يبقى صف 'pending' معلّقًا. */
+  const failTracked = async (
+    errorCode: string,
+    status: number,
+    code: ErrorCode,
+    message: string,
+    extraHeaders: Record<string, string> = {},
+  ) => {
+    await finishAiRequest(rpcCtx, quota.requestId, {
+      status: 'error',
+      durationMs: Date.now() - startedAt,
+      errorCode,
+    })
+    return fail(status, code, message, extraHeaders)
   }
 
   try {
-    let result = await attempt(false)
-    if (!result.success) {
+    let { parsed, usage } = await attempt(false)
+    if (!parsed.success) {
       // إعادة محاولة واحدة آمنة قبل إظهار خطأ للمستخدم.
-      result = await attempt(true)
+      const retry = await attempt(true)
+      parsed = retry.parsed
+      usage = retry.usage
     }
 
-    if (!result.success) {
-      console.error(`[qalam:ai] schema validation failed for task=${taskName} after retry`)
-      return fail(502, 'invalid_response', 'تعذّر فهم نتيجة المعالجة. حاول مرة أخرى.')
+    if (!parsed.success) {
+      log.error('ai.schema_invalid', { task: taskName, retried: true })
+      return await failTracked(
+        'schema_invalid',
+        502,
+        'invalid_response',
+        'تعذّر فهم نتيجة المعالجة. حاول مرة أخرى.',
+      )
     }
 
-    return ok(result.data)
+    const durationMs = Date.now() - startedAt
+    await finishAiRequest(rpcCtx, quota.requestId, {
+      status: 'success',
+      durationMs,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+    })
+    log.info('ai.completed', { task: taskName, durationMs, totalTokens: usage.totalTokens })
+
+    return ok(parsed.data)
   } catch (err) {
+    if (err instanceof TimeoutError) {
+      log.error('ai.timeout', { task: taskName, timeoutMs: err.timeoutMs })
+      return await failTracked('timeout', 504, 'timeout', 'استغرقت العملية وقتًا أطول من المتوقع. حاول مرة أخرى.')
+    }
+
     if (err instanceof UpstreamError) {
-      console.error(`[qalam:ai] upstream error for task=${taskName}: ${err.message}`)
+      // رمز مُصنَّف فقط — لا جسم استجابة المزوّد، فقد يحتوي صدى الـprompt.
+      const errorCode = classifyUpstreamStatus(err.status)
+      log.error('ai.upstream_error', { task: taskName, status: err.status, errorCode })
       if (err.status === 429) {
-        return fail(429, 'rate_limited', 'الخدمة مزدحمة حاليًا. حاول مرة أخرى بعد قليل.')
+        return await failTracked(errorCode, 429, 'rate_limited', 'الخدمة مزدحمة حاليًا. حاول مرة أخرى بعد قليل.', {
+          'Retry-After': '30',
+        })
       }
-      return fail(502, 'server', 'تعذّر إتمام العملية حاليًا. حاول مرة أخرى بعد قليل.')
+      return await failTracked(errorCode, 502, 'server', 'تعذّر إتمام العملية حاليًا. حاول مرة أخرى بعد قليل.')
     }
+
     if (err instanceof SyntaxError) {
-      console.error(`[qalam:ai] JSON parse failure for task=${taskName}`)
-      return fail(502, 'invalid_response', 'تعذّر فهم نتيجة المعالجة. حاول مرة أخرى.')
+      log.error('ai.parse_error', { task: taskName })
+      return await failTracked('parse_error', 502, 'invalid_response', 'تعذّر فهم نتيجة المعالجة. حاول مرة أخرى.')
     }
-    console.error(`[qalam:ai] unexpected error for task=${taskName}`)
-    return fail(500, 'server', 'حدث خطأ غير متوقع. حاول مرة أخرى.')
+
+    // لا نُسجّل err.message: قد يحتوي محتوى مستخدم أو تفاصيل داخلية.
+    log.error('ai.unexpected_error', { task: taskName, kind: (err as Error)?.name })
+    return await failTracked('unexpected', 500, 'server', 'حدث خطأ غير متوقع. حاول مرة أخرى.')
   }
 }

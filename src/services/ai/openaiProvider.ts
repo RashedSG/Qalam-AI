@@ -21,7 +21,9 @@ interface FunctionErrorBody {
 function mapStatus(status: number, body: FunctionErrorBody | null): AiError {
   const code = body?.error?.code
   if (status === 401 || code === 'unauthenticated') return new AiError('unauthenticated')
-  if (status === 429 || code === 'rate_limited') return new AiError('rate_limited')
+  // الخادم يميّز بين الحد اللحظي والسقف اليومي؛ نعرض رسالته هي إن وُجدت.
+  if (status === 429 || code === 'rate_limited') return new AiError('rate_limited', body?.error?.message)
+  if (status === 504 || code === 'timeout') return new AiError('timeout')
   if (code === 'invalid_response') return new AiError('invalid_response')
   if (status >= 500) return new AiError('server')
   return new AiError('unknown', body?.error?.message)

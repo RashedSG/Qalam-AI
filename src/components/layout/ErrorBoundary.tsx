@@ -10,7 +10,11 @@ interface State {
 
 /**
  * حاجز أخطاء عام — يمنع الشاشة البيضاء.
- * خصوصية: لا نعرض ولا نسجّل محتوى المراسلات، فقط رسالة الخطأ التقنية في وحدة التحكم.
+ *
+ * خصوصية: رسالة خطأ React قد تحمل محتوى مُمرَّرًا للعرض — مثل
+ * «Objects are not valid as a React child (found: {subject: …})» — فقد تحتوي
+ * نص مراسلة. لذلك تُسجَّل الرسالة في التطوير فقط؛ وفي الإنتاج يُسجَّل نوع الخطأ
+ * ومسار المكوّنات وحدهما، وهما كافيان للتشخيص وخاليان من محتوى المستخدم.
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false }
@@ -20,7 +24,11 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error('[qalam] render error:', error.message, info.componentStack)
+    if (import.meta.env.DEV) {
+      console.error('[qalam] render error:', error.message, info.componentStack)
+      return
+    }
+    console.error('[qalam] render error:', error.name, info.componentStack)
   }
 
   render() {

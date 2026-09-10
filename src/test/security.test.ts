@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const root = process.cwd()
+const netlifyToml = readFileSync(join(root, 'netlify.toml'), 'utf8')
 
 /** يزيل التعليقات حتى لا تُحسب الإشارات التوثيقية كتسريب فعلي. */
 function stripComments(source: string): string {
@@ -65,5 +66,134 @@ describe('أمن الأسرار', () => {
   it('يستثني .env من Git', () => {
     const ignore = readFileSync(join(root, '.gitignore'), 'utf8')
     expect(ignore).toMatch(/^\.env$/m)
+  })
+})
+
+describe('خصوصية سجلات الخادم', () => {
+  const functionFiles = walk(join(root, 'netlify'))
+  const isLogger = (file: string) => file.endsWith('_shared/log.ts')
+  const isTest = (file: string) => file.endsWith('.test.ts')
+
+  it('لا تستدعي أي دالة console مباشرة — كلها تمر بالمُسجّل المُعقّم', () => {
+    const offenders = functionFiles.filter((file) => {
+      if (isLogger(file) || isTest(file)) return false
+      return /console\.(log|error|warn|info|debug)\s*\(/.test(stripComments(readFileSync(file, 'utf8')))
+    })
+    expect(offenders).toEqual([])
+  })
+
+  it('لا يُسجَّل جسم استجابة المزوّد الخارجي', () => {
+    const openai = readFileSync(join(root, 'netlify/functions/_shared/openai.ts'), 'utf8')
+    // قراءة الجسم عند الفشل هي بذاتها التسريب: لا res.text() ولا res.json() قبل التحقق من res.ok.
+    const failureBranch = openai.slice(openai.indexOf('if (!res.ok)'), openai.indexOf('const data ='))
+    expect(failureBranch).not.toMatch(/res\.(text|json)\(\)/)
+    expect(failureBranch).not.toMatch(/detail/)
+  })
+
+  it('لا تُسجَّل رسالة الاستثناء الخام في مسار تنفيذ الذكاء الاصطناعي', () => {
+    const ai = stripComments(readFileSync(join(root, 'netlify/functions/ai.ts'), 'utf8'))
+    // النطاق مقصود: استثناءات تنفيذ الطلب هي التي قد تحمل محتوى مستخدم
+    // أو صدى prompt. خطأ الإعداد قبل ذلك يحمل أسماء متغيرات بيئة فقط.
+    const executionSection = ai.slice(ai.indexOf('const attempt = async'))
+    expect(executionSection).not.toMatch(/err\.message/)
+    expect(executionSection).not.toMatch(/String\(err\)/)
+  })
+
+  it('خطأ الإعداد يسجّل أسماء المتغيرات الناقصة فقط — لا قيمها', () => {
+    const env = readFileSync(join(root, 'netlify/functions/_shared/env.ts'), 'utf8')
+    // رسالة ConfigError تُبنى من أسماء ثابتة مدفوعة في missing، لا من process.env.
+    const thrown = env.slice(env.indexOf('if (missing.length)'), env.indexOf('return {'))
+    expect(thrown).toMatch(/missing\.join/)
+    expect(thrown).not.toMatch(/process\.env/)
+  })
+
+  it('لا يستخدم كود الخادم Service Role Key', () => {
+    const offenders = functionFiles.filter(
+      (file) => !isTest(file) && /SERVICE_ROLE/i.test(stripComments(readFileSync(file, 'utf8'))),
+    )
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('حد المعدّل الدائم', () => {
+  it('لا يعتمد الحدُّ الفعلي على ذاكرة الدالة', () => {
+    const ai = readFileSync(join(root, 'netlify/functions/ai.ts'), 'utf8')
+    // الحاجز المحلي مسموح كتصفية أولى، لكن يجب أن يُستدعى الحد الدائم أيضًا.
+    expect(ai).toMatch(/beginAiRequest/)
+    expect(ai).toMatch(/finishAiRequest/)
+  })
+
+  it('يُرجع Retry-After مع كل رفض 429', () => {
+    const ai = readFileSync(join(root, 'netlify/functions/ai.ts'), 'utf8')
+    const rejections = ai.match(/fail\(429[\s\S]{0,220}?\)\n/g) ?? []
+    expect(rejections.length).toBeGreaterThan(0)
+    for (const rejection of rejections) {
+      expect(rejection).toMatch(/Retry-After/)
+    }
+  })
+
+  it('يستدعي إجراءات القاعدة برمز المستخدم لا بمفتاح إداري', () => {
+    const usage = readFileSync(join(root, 'netlify/functions/_shared/usage.ts'), 'utf8')
+    expect(usage).toMatch(/Authorization: `Bearer \$\{ctx\.accessToken\}`/)
+    // التعليقات تشرح لماذا لا نستخدم service_role، فلا تُحسب استخدامًا له.
+    expect(stripComments(usage)).not.toMatch(/service_role/i)
+  })
+})
+
+describe('سقف زمني للطلبات الخارجية', () => {
+  it('كل استدعاء خارجي محدود بمهلة', () => {
+    const openai = readFileSync(join(root, 'netlify/functions/_shared/openai.ts'), 'utf8')
+    expect(openai).toMatch(/AbortController/)
+    expect(openai).toMatch(/signal: controller\.signal/)
+
+    const usage = readFileSync(join(root, 'netlify/functions/_shared/usage.ts'), 'utf8')
+    expect(usage).toMatch(/AbortSignal\.timeout/)
+  })
+})
+
+describe('رؤوس الأمان', () => {
+  const csp = netlifyToml.match(/Content-Security-Policy = """([\s\S]*?)"""/)?.[1].replace(/\\\n/g, '') ?? ''
+
+  it('تُعرَّف سياسة CSP', () => {
+    expect(csp).not.toBe('')
+  })
+
+  it('تمنع السكربت المضمّن — لا unsafe-inline ولا unsafe-eval في script-src', () => {
+    const scriptSrc = csp.match(/script-src([^;]*)/)?.[1] ?? ''
+    expect(scriptSrc).not.toMatch(/unsafe-inline/)
+    expect(scriptSrc).not.toMatch(/unsafe-eval/)
+  })
+
+  it('تحصر الاتصالات الصادرة ولا تسمح بمستضيف مفتوح', () => {
+    const connectSrc = csp.match(/connect-src([^;]*)/)?.[1] ?? ''
+    expect(connectSrc).toMatch(/'self'/)
+    expect(connectSrc).toMatch(/supabase\.co/)
+    expect(connectSrc.trim()).not.toMatch(/(^|\s)\*(\s|$)/)
+    expect(connectSrc).not.toMatch(/https:(\s|$)/)
+  })
+
+  it('تُغلق التأطير والكائنات وقاعدة الروابط', () => {
+    expect(csp).toMatch(/frame-ancestors 'none'/)
+    expect(csp).toMatch(/object-src 'none'/)
+    expect(csp).toMatch(/base-uri 'self'/)
+    expect(csp).toMatch(/form-action 'self'/)
+  })
+
+  it('لا يسمح البناء الحالي بمصدر لم تُصرَّح به CSP', () => {
+    const html = readFileSync(join(root, 'index.html'), 'utf8')
+    const origins = [...html.matchAll(/https:\/\/([a-zA-Z0-9.-]+)/g)].map((m) => m[1])
+    for (const origin of new Set(origins)) {
+      expect(csp, `${origin} مستخدم في index.html لكنه غير مسموح في CSP`).toContain(origin)
+    }
+  })
+
+  it('الميكروفون مُغلق الآن — يُفتح صراحةً في المرحلة ٦', () => {
+    const permissions = netlifyToml.match(/Permissions-Policy = "([^"]*)"/)?.[1] ?? ''
+    expect(permissions).toMatch(/microphone=\(\)/)
+    expect(permissions).toMatch(/camera=\(\)/)
+  })
+
+  it('لا تُخزَّن استجابات الدوال في الوسيط', () => {
+    expect(netlifyToml).toMatch(/for = "\/\.netlify\/functions\/\*"/)
   })
 })

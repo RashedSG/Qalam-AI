@@ -40,6 +40,7 @@ export type AiErrorCode =
   | 'unauthenticated'
   | 'rate_limited'
   | 'invalid_response'
+  | 'timeout'
   | 'network'
   | 'server'
   | 'aborted'
@@ -60,6 +61,7 @@ export const AI_ERROR_MESSAGES: Record<AiErrorCode, string> = {
   unauthenticated: 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.',
   rate_limited: 'تم تجاوز عدد الطلبات المسموح بها. انتظر قليلًا ثم حاول مجددًا.',
   invalid_response: 'تعذّر فهم نتيجة المعالجة. حاول مرة أخرى.',
+  timeout: 'استغرقت العملية وقتًا أطول من المتوقع. حاول مرة أخرى.',
   network: 'تعذّر الاتصال بالخدمة. تحقق من اتصالك بالإنترنت.',
   server: 'تعذّر إتمام العملية حاليًا. حاول مرة أخرى بعد قليل.',
   aborted: 'تم إلغاء العملية.',
