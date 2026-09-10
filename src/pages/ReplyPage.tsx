@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, ListChecks, Search, Sparkles } from 'lucide-react'
+import { AlertCircle, ListChecks, RotateCcw, Search, Sparkles } from 'lucide-react'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -13,10 +13,17 @@ import { VariantCard } from '@/features/correspondence/VariantCard'
 import { ReviewPanel } from '@/features/correspondence/ReviewPanel'
 import { CoverageChecklist } from '@/features/correspondence/CoverageChecklist'
 import { useCorrespondenceWorkspace } from '@/features/correspondence/useCorrespondenceWorkspace'
+import { useWorkspaceSnapshot } from '@/features/correspondence/useWorkspaceSnapshot'
+import {
+  clearSnapshot,
+  isReplySnapshotUseful,
+  loadSnapshot,
+  type ReplySnapshot,
+} from '@/features/correspondence/workspaceStorage'
 import { useI18n } from '@/hooks/useI18n'
 import { useAiTask } from '@/hooks/useAi'
 import { useUserContext } from '@/hooks/useProfile'
-import { ai, type IncomingAnalysis, type ReplyDraft } from '@/services/ai'
+import { ai, type CorrespondenceVariant, type IncomingAnalysis, type ReplyDraft } from '@/services/ai'
 import { TONES, type Language, type Tone } from '@/types/domain'
 import { PRIORITY_LABELS, TONE_LABELS, label } from '@/data/reference'
 
@@ -24,17 +31,63 @@ export default function ReplyPage() {
   const { t, lang } = useI18n()
   const userContext = useUserContext()
 
-  const [incomingText, setIncomingText] = useState('')
-  const [replyLanguage, setReplyLanguage] = useState<Language>(userContext?.preferredLanguage ?? 'ar')
-  const [tone, setTone] = useState<Tone>('formal')
-  const [analysis, setAnalysis] = useState<IncomingAnalysis | null>(null)
-  const [answers, setAnswers] = useState<Record<string, string>>({})
+  // لقطة العمل السابقة تُقرأ مرة واحدة عند التركيب.
+  const [restored] = useState<ReplySnapshot | null>(() => loadSnapshot<ReplySnapshot>('reply'))
+  const [showRestoredNotice, setShowRestoredNotice] = useState(
+    () => Boolean(restored && isReplySnapshotUseful(restored)),
+  )
+
+  const [incomingText, setIncomingText] = useState(restored?.incomingText ?? '')
+  const [replyLanguage, setReplyLanguage] = useState<Language>(
+    restored?.replyLanguage ?? userContext?.preferredLanguage ?? 'ar',
+  )
+  const [tone, setTone] = useState<Tone>(restored?.tone ?? 'formal')
+  const [analysis, setAnalysis] = useState<IncomingAnalysis | null>(restored?.analysis ?? null)
+  const [answers, setAnswers] = useState<Record<string, string>>(restored?.answers ?? {})
   const [validationError, setValidationError] = useState<string | null>(null)
-  const [coverage, setCoverage] = useState<ReplyDraft['coverage']>([])
+  const [coverage, setCoverage] = useState<ReplyDraft['coverage']>(restored?.coverage ?? [])
 
   const analyzeTask = useAiTask<IncomingAnalysis>(ai.analyzeIncoming)
   const replyTask = useAiTask<ReplyDraft>(ai.generateReply)
-  const ws = useCorrespondenceWorkspace()
+  const ws = useCorrespondenceWorkspace(restored?.variants ?? null, restored?.review ?? null)
+
+  /* ------------------------------ حفظ تلقائي محلي ------------------------------ */
+  const snapshot: ReplySnapshot = {
+    incomingText,
+    replyLanguage,
+    tone,
+    analysis,
+    answers,
+    variants: ws.variants,
+    coverage,
+    review: ws.review,
+  }
+  useWorkspaceSnapshot('reply', snapshot, isReplySnapshotUseful(snapshot))
+
+  const startFresh = () => {
+    clearSnapshot('reply')
+    setShowRestoredNotice(false)
+    setIncomingText('')
+    setAnalysis(null)
+    setAnswers({})
+    setCoverage([])
+    setValidationError(null)
+    ws.reset()
+    analyzeTask.reset()
+    replyTask.reset()
+  }
+
+  const handleSaveDraft = async (variant: CorrespondenceVariant) => {
+    if (!saveMeta) return
+    const saved = await ws.saveDraft(variant, saveMeta)
+    if (saved) clearSnapshot('reply')
+  }
+
+  const handleSaveFinal = async (variant: CorrespondenceVariant) => {
+    if (!saveMeta) return
+    const saved = await ws.saveFinal(variant, saveMeta)
+    if (saved) clearSnapshot('reply')
+  }
 
   const runAnalyze = async () => {
     if (incomingText.trim().length < 20) {
@@ -42,6 +95,7 @@ export default function ReplyPage() {
       return
     }
     setValidationError(null)
+    setShowRestoredNotice(false)
     ws.reset()
     setAnswers({})
     setCoverage([])
@@ -92,9 +146,31 @@ export default function ReplyPage() {
 
   return (
     <div className="space-y-6">
-      <header>
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t('reply.title')}</h1>
+        {incomingText || ws.variants ? (
+          <Button variant="ghost" size="sm" onClick={startFresh}>
+            <RotateCcw className="size-4" aria-hidden="true" />
+            {t('write.startFresh')}
+          </Button>
+        ) : null}
       </header>
+
+      {showRestoredNotice ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-3 rounded-xl border border-gold-500/35 bg-gold-500/5 p-3.5 text-sm"
+        >
+          <RotateCcw className="size-4 shrink-0 text-gold-600" aria-hidden="true" />
+          <span className="flex-1">
+            <b>{t('write.restored')}</b>
+            <span className="q-muted"> — {t('write.restoredHint')}</span>
+          </span>
+          <Button variant="outline" size="sm" onClick={startFresh}>
+            {t('write.startFresh')}
+          </Button>
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader title={t('reply.paste')} />
@@ -266,8 +342,8 @@ export default function ReplyPage() {
               onRefine={(action) => ws.refine(variant, action, replyLanguage)}
               onTranslate={() => ws.translate(variant, replyLanguage)}
               onReview={() => ws.runReview(variant, replyLanguage, analysis)}
-              onSaveDraft={() => ws.saveDraft(variant, saveMeta)}
-              onSaveFinal={() => ws.saveFinal(variant, saveMeta)}
+              onSaveDraft={() => handleSaveDraft(variant)}
+              onSaveFinal={() => handleSaveFinal(variant)}
             />
           ))}
         </section>

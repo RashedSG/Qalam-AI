@@ -46,6 +46,7 @@ export const ar = {
   'common.english': 'الإنجليزية',
   'common.favorite': 'إضافة للمفضلة',
   'common.unfavorite': 'إزالة من المفضلة',
+  'common.irreversible': 'لا يمكن التراجع عن هذا الإجراء.',
 
   // التنقل
   'nav.dashboard': 'الرئيسية',
@@ -144,6 +145,21 @@ export const ar = {
   'write.recipientPlaceholder': 'مثال: الإدارة المالية',
   'write.formality': 'درجة الرسمية',
   'write.err.tooShort': 'اكتب فكرتك بشيء من التفصيل (١٠ أحرف على الأقل).',
+  'write.startFresh': 'بدء من جديد',
+  'write.restored': 'استعدنا عملك غير المحفوظ',
+  'write.restoredHint': 'حُفظ في متصفحك على هذا الجهاز، ولم يُرسل إلى أي مكان.',
+  'write.editingDraft': 'تعديل مسودة محفوظة',
+  'write.editingDraftHint': 'الحفظ يُحدّث المسودة نفسها ولا ينشئ نسخة جديدة.',
+
+  // تفاصيل المراسلة
+  'detail.editBody': 'نص المراسلة',
+  'detail.saveChanges': 'حفظ التعديلات',
+  'detail.versions': 'سجل الإصدارات',
+  'detail.versionsHint': 'يُحفظ النص السابق تلقائيًا كإصدار عند كل تعديل.',
+  'detail.noVersions': 'لا توجد إصدارات سابقة — سيظهر أول إصدار بعد أول تعديل.',
+  'detail.restore': 'استرجاع',
+  'detail.versionLoaded': 'حُمّل الإصدار في المحرر — اضغط «حفظ التعديلات» لتثبيته.',
+  'detail.autoVersionNote': 'النص قبل التعديل',
 
   // التحليل
   'analysis.title': 'فهمتُ طلبك',

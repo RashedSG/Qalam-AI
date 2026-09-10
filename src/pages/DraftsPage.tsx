@@ -101,11 +101,8 @@ export default function DraftsPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
-                    <Button
-                      size="sm"
-                      onClick={() => navigate('/write', { state: { idea: draft.original_input || draft.body } })}
-                    >
-                      {t('common.open')}
+                    <Button size="sm" onClick={() => navigate(`/write?draft=${draft.id}`)}>
+                      {t('common.edit')}
                     </Button>
                     <Button
                       variant="outline"
@@ -158,7 +155,7 @@ export default function DraftsPage() {
           </>
         }
       >
-        <p className="text-sm leading-7">لا يمكن التراجع عن هذا الإجراء.</p>
+        <p className="text-sm leading-7">{t('common.irreversible')}</p>
       </Modal>
 
       {data && data.length > 0 ? (

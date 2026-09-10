@@ -46,6 +46,7 @@ export const en: Record<TranslationKey, string> = {
   'common.english': 'English',
   'common.favorite': 'Add to favorites',
   'common.unfavorite': 'Remove from favorites',
+  'common.irreversible': 'This action cannot be undone.',
 
   'nav.dashboard': 'Home',
   'nav.write': 'Write',
@@ -138,6 +139,20 @@ export const en: Record<TranslationKey, string> = {
   'write.recipientPlaceholder': 'e.g. Finance Department',
   'write.formality': 'Formality level',
   'write.err.tooShort': 'Add a little more detail (at least 10 characters).',
+  'write.startFresh': 'Start fresh',
+  'write.restored': 'Your unsaved work was restored',
+  'write.restoredHint': 'Kept in your browser on this device — never sent anywhere.',
+  'write.editingDraft': 'Editing a saved draft',
+  'write.editingDraftHint': 'Saving updates this draft instead of creating a copy.',
+
+  'detail.editBody': 'Correspondence body',
+  'detail.saveChanges': 'Save changes',
+  'detail.versions': 'Version history',
+  'detail.versionsHint': 'The previous text is archived automatically on every edit.',
+  'detail.noVersions': 'No earlier versions yet — the first appears after your first edit.',
+  'detail.restore': 'Restore',
+  'detail.versionLoaded': 'Version loaded into the editor — press Save changes to keep it.',
+  'detail.autoVersionNote': 'Text before edit',
 
   'analysis.title': 'Here is what I understood',
   'analysis.subtitle': 'Review and adjust anything before drafting.',

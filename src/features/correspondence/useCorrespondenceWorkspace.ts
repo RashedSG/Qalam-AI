@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePreferences } from '@/hooks/useProfile'
 import { useToast } from '@/components/ui/Toast'
 import { useI18n } from '@/hooks/useI18n'
-import { createDraft } from '@/services/db/drafts'
+import { createDraft, updateDraft } from '@/services/db/drafts'
 import { createCorrespondence } from '@/services/db/correspondences'
 import { deriveTitle } from '@/lib/utils'
 import type { CorrespondenceSource } from '@/types/database'
@@ -28,15 +28,19 @@ export interface SaveMeta {
  * منطق مشترك بين "كتابة مراسلة" و"الرد على مراسلة":
  * تعديل الصيغ، إعادة الصياغة، الترجمة، المراجعة، والحفظ.
  */
-export function useCorrespondenceWorkspace() {
+export function useCorrespondenceWorkspace(
+  initialVariants: CorrespondenceVariant[] | null = null,
+  initialReview: ReviewResult | null = null,
+) {
   const { user, accessToken } = useAuth()
   const { data: preferences } = usePreferences()
   const { toast } = useToast()
   const { t } = useI18n()
   const queryClient = useQueryClient()
 
-  const [variants, setVariants] = useState<CorrespondenceVariant[] | null>(null)
-  const [review, setReview] = useState<ReviewResult | null>(null)
+  // القيم الأولية تأتي من لقطة العمل المستعادة بعد تحديث الصفحة.
+  const [variants, setVariants] = useState<CorrespondenceVariant[] | null>(initialVariants)
+  const [review, setReview] = useState<ReviewResult | null>(initialReview)
   const [busyKind, setBusyKind] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -125,13 +129,17 @@ export function useCorrespondenceWorkspace() {
     [accessToken, handleAiError],
   )
 
+  /**
+   * يحفظ مسودة. عند تمرير draftId يُحدّث المسودة نفسها بدل إنشاء نسخة جديدة،
+   * فتبقى حلقة «فتح ← تعديل ← حفظ» على صف واحد.
+   * يعيد معرّف المسودة ليتابع الاستدعاء عليه لاحقًا.
+   */
   const saveDraft = useCallback(
-    async (variant: CorrespondenceVariant, meta: SaveMeta) => {
-      if (!user) return
+    async (variant: CorrespondenceVariant, meta: SaveMeta, draftId?: string | null) => {
+      if (!user) return null
       setSaving(true)
       try {
-        await createDraft({
-          user_id: user.id,
+        const payload = {
           title: deriveTitle(variant.subject, variant.body),
           subject: variant.subject,
           body: variant.body,
@@ -141,11 +149,18 @@ export function useCorrespondenceWorkspace() {
           department_key: meta.departmentKey,
           original_input: meta.originalInput,
           analysis: meta.analysis ?? null,
-        })
+        }
+
+        const saved = draftId
+          ? await updateDraft(draftId, payload)
+          : await createDraft({ user_id: user.id, ...payload })
+
         await queryClient.invalidateQueries({ queryKey: ['drafts'] })
         toast(t('common.saved'), 'success')
+        return saved
       } catch {
         toast(t('error.saveFailed'), 'error')
+        return null
       } finally {
         setSaving(false)
       }

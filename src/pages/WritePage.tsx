@@ -1,22 +1,31 @@
-import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
-import { ChevronDown, Search, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronDown, FileEdit, RotateCcw, Search, Sparkles } from 'lucide-react'
 import { Card, CardBody, CardFooter, CardHeader } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
-import { ErrorState } from '@/components/ui/States'
+import { ErrorState, Skeleton } from '@/components/ui/States'
 import { ProcessingSteps } from '@/components/ui/ProcessingSteps'
 import { AnalysisPanel } from '@/features/correspondence/AnalysisPanel'
 import { VariantCard } from '@/features/correspondence/VariantCard'
 import { ReviewPanel } from '@/features/correspondence/ReviewPanel'
 import { useCorrespondenceWorkspace } from '@/features/correspondence/useCorrespondenceWorkspace'
+import { useWorkspaceSnapshot } from '@/features/correspondence/useWorkspaceSnapshot'
+import {
+  clearSnapshot,
+  isWriteSnapshotUseful,
+  loadSnapshot,
+  type WriteSnapshot,
+} from '@/features/correspondence/workspaceStorage'
 import { useI18n } from '@/hooks/useI18n'
 import { useAiTask } from '@/hooks/useAi'
 import { useUserContext } from '@/hooks/useProfile'
-import { ai, type CorrespondenceDraft, type RequestAnalysis } from '@/services/ai'
+import { getDraft } from '@/services/db/drafts'
+import { ai, type CorrespondenceDraft, type CorrespondenceVariant, type RequestAnalysis } from '@/services/ai'
 import {
   CORRESPONDENCE_TYPES,
   FORMALITY_LEVELS,
@@ -27,28 +36,122 @@ import {
   type Priority,
 } from '@/types/domain'
 import { CORRESPONDENCE_TYPE_LABELS, FORMALITY_LABELS, PRIORITY_LABELS, label } from '@/data/reference'
-import { cn } from '@/lib/utils'
+import { cn, countWords } from '@/lib/utils'
 
 export default function WritePage() {
   const { t, lang } = useI18n()
   const userContext = useUserContext()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+
   const seeded = (location.state as { idea?: string; body?: string } | null) ?? null
+  const seededIdea = seeded?.idea ?? seeded?.body ?? ''
+  const draftParam = searchParams.get('draft')
 
-  const [idea, setIdea] = useState(seeded?.idea ?? seeded?.body ?? '')
+  // لقطة العمل السابقة تُقرأ مرة واحدة عند التركيب.
+  // القالب الممرّر أو المسودة المطلوبة يتقدّمان عليها.
+  const [restoredSnapshot] = useState<WriteSnapshot | null>(() =>
+    seededIdea || draftParam ? null : loadSnapshot<WriteSnapshot>('write'),
+  )
+  const [showRestoredNotice, setShowRestoredNotice] = useState(
+    () => Boolean(restoredSnapshot && isWriteSnapshotUseful(restoredSnapshot)),
+  )
+
+  const [idea, setIdea] = useState(seededIdea || restoredSnapshot?.idea || '')
   const [showOptions, setShowOptions] = useState(false)
-  const [language, setLanguage] = useState<Language>(userContext?.preferredLanguage ?? 'ar')
-  const [recipient, setRecipient] = useState('')
-  const [correspondenceType, setCorrespondenceType] = useState<CorrespondenceType | ''>('')
-  const [formality, setFormality] = useState<Formality | ''>('')
-  const [priority, setPriority] = useState<Priority | ''>('')
+  const [language, setLanguage] = useState<Language>(
+    restoredSnapshot?.language ?? userContext?.preferredLanguage ?? 'ar',
+  )
+  const [recipient, setRecipient] = useState(restoredSnapshot?.recipient ?? '')
+  const [correspondenceType, setCorrespondenceType] = useState<CorrespondenceType | ''>(
+    restoredSnapshot?.correspondenceType ?? '',
+  )
+  const [formality, setFormality] = useState<Formality | ''>(restoredSnapshot?.formality ?? '')
+  const [priority, setPriority] = useState<Priority | ''>(restoredSnapshot?.priority ?? '')
   const [validationError, setValidationError] = useState<string | null>(null)
-
-  const [analysis, setAnalysis] = useState<RequestAnalysis | null>(null)
+  const [analysis, setAnalysis] = useState<RequestAnalysis | null>(restoredSnapshot?.analysis ?? null)
+  const [draftId, setDraftId] = useState<string | null>(restoredSnapshot?.draftId ?? draftParam)
 
   const analyzeTask = useAiTask<RequestAnalysis>(ai.analyzeRequest)
   const generateTask = useAiTask<CorrespondenceDraft>(ai.generateCorrespondence)
-  const ws = useCorrespondenceWorkspace()
+  const ws = useCorrespondenceWorkspace(restoredSnapshot?.variants ?? null, restoredSnapshot?.review ?? null)
+
+  /* ------------------------ تحميل مسودة محفوظة للتعديل ------------------------ */
+  const draftQuery = useQuery({
+    queryKey: ['draft', draftParam],
+    queryFn: () => getDraft(draftParam!),
+    enabled: Boolean(draftParam),
+    staleTime: Infinity,
+  })
+
+  const loadedDraft = draftQuery.data
+  useEffect(() => {
+    if (!loadedDraft) return
+    setIdea(loadedDraft.original_input || loadedDraft.body || '')
+    setRecipient(loadedDraft.recipient || '')
+    setLanguage(loadedDraft.language)
+    setCorrespondenceType((loadedDraft.correspondence_type as CorrespondenceType) || '')
+    setDraftId(loadedDraft.id)
+    setAnalysis((loadedDraft.analysis as RequestAnalysis | null) ?? null)
+
+    // نعرض النص المحفوظ كصيغة قابلة للتحرير وإعادة الصياغة فورًا.
+    if (loadedDraft.body) {
+      ws.setVariants([
+        {
+          kind: 'recommended',
+          title: '',
+          subject: loadedDraft.subject,
+          body: loadedDraft.body,
+          wordCount: countWords(loadedDraft.body),
+        },
+      ])
+    }
+    // ws مستقر عبر useCallback؛ الاعتماد على المسودة وحدها كافٍ.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedDraft])
+
+  /* ------------------------------ حفظ تلقائي محلي ------------------------------ */
+  const snapshot: WriteSnapshot = {
+    idea,
+    language,
+    recipient,
+    correspondenceType,
+    formality,
+    priority,
+    analysis,
+    variants: ws.variants,
+    review: ws.review,
+    draftId,
+  }
+  useWorkspaceSnapshot('write', snapshot, isWriteSnapshotUseful(snapshot))
+
+  /* --------------------------------- إجراءات --------------------------------- */
+  const startFresh = () => {
+    clearSnapshot('write')
+    setShowRestoredNotice(false)
+    setIdea('')
+    setRecipient('')
+    setCorrespondenceType('')
+    setFormality('')
+    setPriority('')
+    setAnalysis(null)
+    setValidationError(null)
+    setDraftId(null)
+    ws.reset()
+    analyzeTask.reset()
+    generateTask.reset()
+    if (draftParam) setSearchParams({}, { replace: true })
+  }
+
+  const analyzePayload = () => ({
+    idea: idea.trim(),
+    language,
+    recipient: recipient.trim() || undefined,
+    correspondenceType: correspondenceType || undefined,
+    formality: formality || undefined,
+    priority: priority || undefined,
+    userContext,
+  })
 
   const runAnalyze = async () => {
     if (idea.trim().length < 10) {
@@ -56,16 +159,9 @@ export default function WritePage() {
       return
     }
     setValidationError(null)
+    setShowRestoredNotice(false)
     ws.reset()
-    const result = await analyzeTask.run({
-      idea: idea.trim(),
-      language,
-      recipient: recipient.trim() || undefined,
-      correspondenceType: correspondenceType || undefined,
-      formality: formality || undefined,
-      priority: priority || undefined,
-      userContext,
-    })
+    const result = await analyzeTask.run(analyzePayload())
     if (result) setAnalysis(result)
   }
 
@@ -84,20 +180,28 @@ export default function WritePage() {
       return
     }
     setValidationError(null)
+    setShowRestoredNotice(false)
     ws.reset()
-    const result = await analyzeTask.run({
-      idea: idea.trim(),
-      language,
-      recipient: recipient.trim() || undefined,
-      correspondenceType: correspondenceType || undefined,
-      formality: formality || undefined,
-      priority: priority || undefined,
-      userContext,
-    })
+    const result = await analyzeTask.run(analyzePayload())
     if (result) {
       setAnalysis(result)
       await runGenerate(result)
     }
+  }
+
+  const handleSaveDraft = async (variant: CorrespondenceVariant) => {
+    if (!saveMeta) return
+    const saved = await ws.saveDraft(variant, saveMeta, draftId)
+    if (saved) {
+      setDraftId(saved.id)
+      clearSnapshot('write')
+    }
+  }
+
+  const handleSaveFinal = async (variant: CorrespondenceVariant) => {
+    if (!saveMeta) return
+    const saved = await ws.saveFinal(variant, saveMeta)
+    if (saved) clearSnapshot('write')
   }
 
   const busy = analyzeTask.loading || generateTask.loading
@@ -117,11 +221,55 @@ export default function WritePage() {
       }
     : null
 
+  if (draftParam && draftQuery.isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-9 w-1/3" />
+        <Skeleton className="h-64" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      <header>
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{t('write.title')}</h1>
+        {idea || ws.variants ? (
+          <Button variant="ghost" size="sm" onClick={startFresh}>
+            <RotateCcw className="size-4" aria-hidden="true" />
+            {t('write.startFresh')}
+          </Button>
+        ) : null}
       </header>
+
+      {draftId ? (
+        <div
+          className="flex items-center gap-2.5 rounded-xl border p-3.5 text-sm"
+          style={{ borderColor: 'rgb(var(--q-border))' }}
+        >
+          <FileEdit className="size-4 shrink-0 text-gold-600" aria-hidden="true" />
+          <span>
+            <b>{t('write.editingDraft')}</b>
+            <span className="q-muted"> — {t('write.editingDraftHint')}</span>
+          </span>
+        </div>
+      ) : null}
+
+      {showRestoredNotice ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-3 rounded-xl border border-gold-500/35 bg-gold-500/5 p-3.5 text-sm"
+        >
+          <RotateCcw className="size-4 shrink-0 text-gold-600" aria-hidden="true" />
+          <span className="flex-1">
+            <b>{t('write.restored')}</b>
+            <span className="q-muted"> — {t('write.restoredHint')}</span>
+          </span>
+          <Button variant="outline" size="sm" onClick={startFresh}>
+            {t('write.startFresh')}
+          </Button>
+        </div>
+      ) : null}
 
       <Card>
         <CardHeader title={t('write.prompt')} />
@@ -270,8 +418,8 @@ export default function WritePage() {
               onRefine={(action) => ws.refine(variant, action, saveMeta.language)}
               onTranslate={() => ws.translate(variant, saveMeta.language)}
               onReview={() => ws.runReview(variant, saveMeta.language)}
-              onSaveDraft={() => ws.saveDraft(variant, saveMeta)}
-              onSaveFinal={() => ws.saveFinal(variant, saveMeta)}
+              onSaveDraft={() => handleSaveDraft(variant)}
+              onSaveFinal={() => handleSaveFinal(variant)}
             />
           ))}
         </section>

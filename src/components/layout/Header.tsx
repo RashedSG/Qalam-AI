@@ -5,6 +5,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { useTheme } from '@/hooks/useTheme'
 import { useProfile } from '@/hooks/useProfile'
 import { Logo } from '@/components/ui/Logo'
+import { clearAllSnapshots } from '@/features/correspondence/workspaceStorage'
 
 export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { t, lang, setLang } = useI18n()
@@ -67,6 +68,8 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         <button
           type="button"
           onClick={async () => {
+            // لا نترك عملًا غير محفوظ في متصفح مشترك بعد الخروج.
+            clearAllSnapshots()
             await signOut()
             navigate('/', { replace: true })
           }}
