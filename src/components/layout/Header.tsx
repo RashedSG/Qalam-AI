@@ -6,6 +6,7 @@ import { useTheme } from '@/hooks/useTheme'
 import { useProfile } from '@/hooks/useProfile'
 import { Logo } from '@/components/ui/Logo'
 import { clearAllSnapshots } from '@/features/correspondence/workspaceStorage'
+import { NotificationsBell } from '@/features/enterprise/NotificationsBell'
 
 export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
   const { t, lang, setLang } = useI18n()
@@ -34,6 +35,7 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
       </div>
 
       <div className="ms-auto flex items-center gap-1">
+        <NotificationsBell />
         <button
           type="button"
           onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}

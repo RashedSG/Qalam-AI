@@ -76,6 +76,25 @@ export interface Correspondence {
   is_archived: boolean
   created_at: Timestamp
   updated_at: Timestamp
+
+  /* المرحلة ٣ — الحقول المؤسسية. اختيارية: لا يستخدمها الوضع الشخصي. */
+  /** من أين إلى أين. مستقل عن `source` الذي يصف كيف أُنشئت المراسلة. */
+  direction?: Direction
+  current_status?: CorrespondenceStatus
+  /** يُصدره issue_reference_number() وحده — لا يُكتب من التطبيق. */
+  reference_number?: string | null
+  external_reference_number?: string | null
+  sender?: string
+  sender_organization?: string
+  recipient_organization?: string
+  classification_key?: string | null
+  received_at?: Timestamp | null
+  issued_at?: Timestamp | null
+  due_at?: Timestamp | null
+  created_by?: Uuid | null
+  /** الوحدة المالكة. null = ارجع إلى وحدة المالك. */
+  owner_unit_id?: Uuid | null
+  parent_id?: Uuid | null
 }
 
 export interface CorrespondenceVersion {
@@ -268,5 +287,106 @@ export interface AuditEntry {
   previous_status: string | null
   new_status: string | null
   metadata: Record<string, unknown>
+  created_at: Timestamp
+}
+
+/* ============================================================================
+ * المرحلة ٣ — المراسلة المؤسسية
+ * ========================================================================== */
+
+export type Direction = 'incoming' | 'outgoing' | 'internal'
+export type CorrespondenceStatus =
+  | 'draft' | 'in_review' | 'returned' | 'in_approval'
+  | 'approved' | 'signed' | 'issued' | 'closed' | 'archived'
+export type ReferralStatus = 'pending' | 'acknowledged' | 'responded' | 'closed'
+export type LinkKind = 'related' | 'supersedes' | 'reference'
+export type NotificationKind =
+  | 'referral.received' | 'referral.responded' | 'referral.overdue'
+  | 'correspondence.returned' | 'correspondence.approved'
+
+export interface ClassificationLevel {
+  id: Uuid
+  organization_id: Uuid
+  key: string
+  name_ar: string
+  name_en: string
+  /** الأعلى أكثر سرية. يجب أن يساويه تخليص العضو أو يزيد. */
+  rank: number
+  is_default: boolean
+}
+
+export interface ReferralInstruction {
+  id: Uuid
+  organization_id: Uuid
+  key: string
+  name_ar: string
+  name_en: string
+  requires_response: boolean
+  sort_order: number
+  is_active: boolean
+}
+
+export interface ReferenceNumberPolicy {
+  id: Uuid
+  organization_id: Uuid
+  direction: Direction | null
+  format: string
+  seq_padding: number
+  reset_yearly: boolean
+  per_unit: boolean
+  per_direction: boolean
+  is_active: boolean
+}
+
+export interface Referral {
+  id: Uuid
+  correspondence_id: Uuid
+  organization_id: Uuid
+  from_user_id: Uuid
+  to_user_id: Uuid | null
+  to_unit_id: Uuid | null
+  instruction_key: string
+  note: string
+  due_at: Timestamp | null
+  status: ReferralStatus
+  response: string
+  responded_at: Timestamp | null
+  responded_by: Uuid | null
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+export interface Attachment {
+  id: Uuid
+  correspondence_id: Uuid
+  organization_id: Uuid | null
+  /** عمود مُولَّد — لا يُكتب من التطبيق. يُقرأ بعد الإدراج ثم يُرفع الملف إليه. */
+  storage_path: string
+  filename: string
+  mime_type: string
+  size_bytes: number
+  checksum: string | null
+  classification_key: string | null
+  uploaded_by: Uuid
+  created_at: Timestamp
+}
+
+export interface CorrespondenceLink {
+  id: Uuid
+  from_id: Uuid
+  to_id: Uuid
+  kind: LinkKind
+  created_by: Uuid | null
+  created_at: Timestamp
+}
+
+export interface AppNotification {
+  id: number
+  user_id: Uuid
+  organization_id: Uuid | null
+  kind: NotificationKind
+  entity_type: string
+  entity_id: Uuid | null
+  read_at: Timestamp | null
   created_at: Timestamp
 }

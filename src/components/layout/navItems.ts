@@ -9,10 +9,13 @@ import {
   Home,
   Languages,
   LayoutTemplate,
+  Inbox,
   Network,
   Reply,
+  Send,
   ScrollText,
   Settings,
+  ClipboardList,
   ShieldCheck,
   Sparkles,
   Star,
@@ -71,4 +74,14 @@ export const ADMIN_NAV: NavItem[] = [
   { to: '/organization/users', labelKey: 'nav.users', icon: Users, permission: 'users.manage' },
   { to: '/organization/roles', labelKey: 'nav.roles', icon: ShieldCheck, permission: 'roles.manage' },
   { to: '/organization/audit', labelKey: 'nav.audit', icon: ScrollText, permission: 'audit.view' },
+]
+
+/**
+ * المراسلة المؤسسية — لا يظهر القسم إلا لعضو مؤسسة.
+ * «صندوق عملي» بلا صلاحية: كل عضو له إحالات محتملة.
+ */
+export const ENTERPRISE_NAV: NavItem[] = [
+  { to: '/my-work', labelKey: 'nav.mywork', icon: ClipboardList },
+  { to: '/inbox', labelKey: 'nav.inbox', icon: Inbox, permission: 'correspondence.view' },
+  { to: '/outbox', labelKey: 'nav.outbox', icon: Send, permission: 'correspondence.view' },
 ]

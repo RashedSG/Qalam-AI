@@ -8,6 +8,7 @@ import {
   ArrowRight,
   Copy,
   FileCheck2,
+  Hash,
   History,
   LayoutTemplate,
   Pencil,
@@ -25,6 +26,7 @@ import { Modal } from '@/components/ui/Modal'
 import { EmptyState, ErrorState, Skeleton } from '@/components/ui/States'
 import { useI18n } from '@/hooks/useI18n'
 import { useAuth } from '@/hooks/useAuth'
+import { useAuthorization } from '@/hooks/useAuthorization'
 import { useToast } from '@/components/ui/Toast'
 import {
   addVersion,
@@ -36,6 +38,9 @@ import {
 } from '@/services/db/correspondences'
 import { addFavorite } from '@/services/db/favorites'
 import { createTemplate } from '@/services/db/templates'
+import { issueReferenceNumber, listClassificationLevels } from '@/services/db/enterprise'
+import { ReferralPanel } from '@/features/enterprise/ReferralPanel'
+import { AttachmentPanel } from '@/features/enterprise/AttachmentPanel'
 import { CORRESPONDENCE_TYPE_LABELS, PRIORITY_LABELS, TONE_LABELS, label } from '@/data/reference'
 import { copyToClipboard, deriveTitle, formatDate, formatRelative } from '@/lib/utils'
 import type { CorrespondenceType, Tone } from '@/types/domain'
@@ -44,6 +49,8 @@ export default function CorrespondenceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { t, lang, dir } = useI18n()
   const { user } = useAuth()
+  const { organization, can } = useAuthorization()
+  const [issuing, setIssuing] = useState(false)
   const { toast } = useToast()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -63,6 +70,33 @@ export default function CorrespondenceDetailPage() {
     queryFn: () => getCorrespondence(id!),
     enabled: Boolean(id),
   })
+
+  const levelsQuery = useQuery({
+    queryKey: ['classification-levels', organization?.id],
+    queryFn: () => listClassificationLevels(organization!.id),
+    enabled: Boolean(organization?.id),
+  })
+
+  /** اسم التصنيف يُعرض فقط إن كان أعلى من الأدنى — الأدنى ضجيج بصري. */
+  const classificationBadge = (() => {
+    const level = (levelsQuery.data ?? []).find((item) => item.key === data?.classification_key)
+    return level && level.rank > 1 ? level.name_ar : null
+  })()
+
+  /** إصدار رقم المراسلة — ذرّي في القاعدة ولا يُعاد إصداره. */
+  const issueNumber = async () => {
+    if (!data) return
+    setIssuing(true)
+    try {
+      await issueReferenceNumber(data.id)
+      await queryClient.invalidateQueries({ queryKey: ['correspondence', id] })
+      toast(t('corr.referenceIssued'), 'success')
+    } catch {
+      toast(t('error.saveFailed'), 'error')
+    } finally {
+      setIssuing(false)
+    }
+  }
 
   const versionsQuery = useQuery({
     queryKey: ['correspondence-versions', id],
@@ -267,6 +301,25 @@ export default function CorrespondenceDetailPage() {
                 {label(PRIORITY_LABELS[data.priority], lang)}
               </Badge>
               {data.is_archived ? <Badge tone="gold">{t('history.archived')}</Badge> : null}
+              {classificationBadge ? <Badge tone="gold">{classificationBadge}</Badge> : null}
+              {data.organization_id ? (
+                data.reference_number ? (
+                  <Badge tone="navy">
+                    <span dir="ltr">{data.reference_number}</span>
+                  </Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={issuing}
+                    onClick={issueNumber}
+                    title={t('corr.noReference')}
+                  >
+                    <Hash className="size-3.5" aria-hidden="true" />
+                    {t('corr.issueReference')}
+                  </Button>
+                )
+              ) : null}
             </div>
           }
         />
@@ -379,6 +432,20 @@ export default function CorrespondenceDetailPage() {
           )}
         </CardFooter>
       </Card>
+
+      {/* --------------------- المراسلة المؤسسية (المرحلة ٣) ---------------------
+          تظهر فقط للمراسلات المرتبطة بمؤسسة — الوضع الشخصي لا يراها. */}
+      {data.organization_id ? (
+        <>
+          <ReferralPanel correspondenceId={data.id} />
+          <AttachmentPanel
+            correspondenceId={data.id}
+            organizationId={data.organization_id}
+            classificationKey={data.classification_key ?? null}
+            canUpload={data.user_id === user?.id || can('attachment.upload')}
+          />
+        </>
+      ) : null}
 
       {/* ------------------------------ سجل الإصدارات ------------------------------ */}
       <Card>

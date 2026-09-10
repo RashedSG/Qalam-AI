@@ -12,6 +12,11 @@ const authz = readFileSync(join(root, 'supabase/migrations/0008_authorization.sq
 const backfill = readFileSync(join(root, 'supabase/migrations/0009_backfill_organization.sql'), 'utf8')
 const rbacRls = readFileSync(join(root, 'supabase/migrations/0010_rls_rbac.sql'), 'utf8')
 const auditTriggers = readFileSync(join(root, 'supabase/migrations/0011_audit_triggers.sql'), 'utf8')
+const corrCore = readFileSync(join(root, 'supabase/migrations/0012_correspondence_core.sql'), 'utf8')
+const refNumbers = readFileSync(join(root, 'supabase/migrations/0013_reference_numbers.sql'), 'utf8')
+const attachments = readFileSync(join(root, 'supabase/migrations/0014_attachments.sql'), 'utf8')
+const referrals = readFileSync(join(root, 'supabase/migrations/0015_referrals_notifications.sql'), 'utf8')
+const rlsPhase3 = readFileSync(join(root, 'supabase/migrations/0016_rls_phase3.sql'), 'utf8')
 
 /** كل الجداول التي يجب أن تكون محمية بـ RLS. */
 const TABLES = [
@@ -372,5 +377,177 @@ describe('المرحلة ٢ — المؤسسات والأدوار', () => {
     // العقد موثّق صراحةً: الحماية في القاعدة لا في المتصفح.
     expect(authorization).toMatch(/RLS|قاعدة البيانات/)
     expect(authorization).not.toMatch(/service_role/i)
+  })
+})
+
+describe('المرحلة ٣ — المراسلة المؤسسية', () => {
+  const PHASE3_TABLES = [
+    'classification_levels', 'reference_number_policies', 'reference_number_counters',
+    'correspondence_links', 'referral_instructions', 'referrals', 'notifications',
+  ]
+
+  it('تُفعّل RLS على كل جدول جديد', () => {
+    for (const table of PHASE3_TABLES) {
+      expect(rlsPhase3, table).toMatch(new RegExp(`alter table public\\.${table}\\s+enable row level security;`))
+    }
+    expect(attachments).toMatch(/alter table public\.attachments enable row level security;/)
+  })
+
+  it('source يبقى قائمًا و direction مفهوم مستقل', () => {
+    expect(corrCore).toMatch(/add column if not exists direction/)
+    expect(corrCore).not.toMatch(/drop column .*source/i)
+    expect(corrCore).toMatch(/source` القائم يبقى كما هو للتوافق/)
+  })
+
+  it('كل عمود جديد له افتراضي يحفظ السلوك القائم', () => {
+    expect(corrCore).toMatch(/direction public\.qalam_direction not null default 'outgoing'/)
+    expect(corrCore).toMatch(/current_status public\.qalam_correspondence_status not null default 'draft'/)
+    // التخليص الافتراضي يساوي أدنى تصنيف، فلا يفقد أحد وصولًا كان يملكه.
+    expect(corrCore).toMatch(/clearance_rank integer not null default 1/)
+    expect(corrCore).toMatch(/set classification_key = 'internal' where classification_key is null/)
+  })
+
+  it('التصنيف يؤثر في التحكم بالوصول لا في العرض فقط', () => {
+    const fn = corrCore.slice(corrCore.indexOf('function public.can_access_row('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/classification_levels/)
+    expect(impl).toMatch(/my_clearance.*<.*needed_rank|coalesce\(my_clearance, 0\) < needed_rank/)
+    // المالك قبل فحص التصنيف: تصنيفه لا يحجبه عن مراسلته.
+    // نقارن مواضع الشروط في المنطق، لا مواضع أسماء المتغيرات (تسبقها الإعلانات).
+    const ownerGuard = impl.indexOf('if p_owner_id = uid then return true;')
+    const classificationGuard = impl.indexOf('if p_classification is not null then')
+    expect(ownerGuard).toBeGreaterThan(-1)
+    expect(classificationGuard).toBeGreaterThan(-1)
+    expect(ownerGuard).toBeLessThan(classificationGuard)
+  })
+
+  it('مولّد الأرقام ذرّي ولا يقرأ ثم يكتب', () => {
+    const fn = refNumbers.slice(refNumbers.indexOf('function public.issue_reference_number('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl, 'الزيادة والقراءة عملية واحدة').toMatch(/on conflict \(organization_id, scope_key\)\s*\n?\s*do update set seq = ctr\.seq \+ 1/)
+    expect(impl).toMatch(/returning ctr\.seq into next_seq/)
+    expect(impl, 'لا يُعاد إصدار رقم').toMatch(/if row_data\.reference_number is not null then\s*\n\s*return row_data\.reference_number;/)
+  })
+
+  it('لا تنسيق رقم مثبّت في الكود', () => {
+    // الصيغة تأتي من السياسة، والرموز تُستبدل لا تُلصق.
+    expect(refNumbers).toMatch(/result := policy\.format;/)
+    expect(refNumbers).toMatch(/replace\(result, '\{ORG\}'/)
+  })
+
+  it('الرقم يمر بالدالة وحدها — حارس على العمود', () => {
+    expect(rlsPhase3).toMatch(/guard_reference_number/)
+    expect(rlsPhase3).toMatch(/reference numbers are issued by issue_reference_number\(\)/)
+    expect(refNumbers, 'الدالة ترفع راية محلية فيسمح لها الحارس').toMatch(/set_config\('qalam\.issuing_reference', 'on', true\)/)
+  })
+
+  it('العدّادات محجوبة عن المتصفح تمامًا', () => {
+    expect(rlsPhase3).toMatch(/revoke all on public\.reference_number_counters from public, anon, authenticated;/)
+  })
+
+  it('مسار المرفق مُولَّد ولا يُكتب من العميل', () => {
+    expect(attachments).toMatch(/storage_path\s+text generated always as/)
+    expect(attachments).toMatch(/stored,/)
+  })
+
+  it('سياسات المرفقات لا تبحث عن الصف الذي تُدرجه', () => {
+    // دالة STABLE تستخدم لقطة ما قبل العبارة فلا ترى الصف الجديد،
+    // فينكسر INSERT … RETURNING وهو ما يُصدره عميل Supabase.
+    const policy = rlsPhase3.slice(rlsPhase3.indexOf('create policy "attachments_insert"'))
+    const body = policy.slice(0, policy.indexOf(';'))
+    expect(body).toMatch(/can_access_attachment_row/)
+    expect(body).not.toMatch(/can_access_attachment\(/)
+  })
+
+  it('لا سياسة UPDATE للمرفقات — التعديل يجعل السجل كاذبًا', () => {
+    const policies = rlsPhase3.match(/create policy "[^"]*" on public\.attachments[\s\S]*?;/g) ?? []
+    for (const policy of policies) {
+      expect(policy).not.toMatch(/for update/)
+    }
+    expect(rlsPhase3).toMatch(/revoke update on public\.attachments\s+from authenticated;/)
+  })
+
+  it('سياسة Storage تشتق القرار من نفس الدالة', () => {
+    expect(attachments).toMatch(/can_access_storage_object/)
+    expect(attachments).toMatch(/bucket_id = 'correspondence-attachments'/)
+    // مسار لا يطابق الاتفاق يُرفض بدل أن يُفترض صحيحًا.
+    const fn = attachments.slice(attachments.indexOf('function public.can_access_storage_object('))
+    expect(fn.slice(0, fn.indexOf('$$;'))).toMatch(/exception when others then\s*\n\s*return false;/)
+  })
+
+  it('لا سياسة UPDATE لكائنات Storage', () => {
+    const storageBlock = attachments.slice(attachments.indexOf('سياسات Storage'))
+    expect(storageBlock).not.toMatch(/for update/)
+  })
+
+  it('الإحالة والرد يمران بإجراءات لا بكتابة مباشرة', () => {
+    expect(rlsPhase3).toMatch(/revoke insert, update, delete on public\.referrals from authenticated;/)
+    for (const fn of ['create_referral', 'respond_to_referral']) {
+      const body = referrals.slice(referrals.indexOf(`function public.${fn}(`))
+      const impl = body.slice(0, body.indexOf('$$;'))
+      expect(impl, `${fn} يجب أن يرفض غير المصادق`).toMatch(/not authenticated/)
+      expect(impl, `${fn} يجب أن يفحص الصلاحية`).toMatch(/not permitted/)
+    }
+  })
+
+  it('الإحالة لا تتجاوز حدود المؤسسة', () => {
+    const fn = referrals.slice(referrals.indexOf('function public.create_referral('))
+    const impl = fn.slice(0, fn.indexOf('$$;'))
+    expect(impl).toMatch(/not an active member/)
+    expect(impl).toMatch(/outside the organization/)
+  })
+
+  it('الإشعار لا يحمل محتوى مراسلة', () => {
+    const table = referrals.slice(referrals.indexOf('create table if not exists public.notifications'))
+    const body = table.slice(0, table.indexOf(');'))
+    for (const forbidden of ['subject', 'body', 'title', 'message', 'content']) {
+      expect(body, `العمود ${forbidden} يسرّب محتوى`).not.toMatch(new RegExp(`\\b${forbidden}\\s`))
+    }
+    expect(body, 'المحتوى مفتاح ترجمة لا نص').toMatch(/kind\s+text not null/)
+  })
+
+  it('الإشعارات لا تُنشأ ولا تُعدَّل من المتصفح', () => {
+    expect(rlsPhase3).toMatch(/revoke insert, update on public\.notifications\s+from authenticated;/)
+    expect(referrals).toMatch(/create trigger notify_referral_trg/)
+  })
+
+  it('السياسات المتبادلة تمر بدوال definer فلا تتكرر لا نهائيًا', () => {
+    // سياسة المراسلات تحتاج الإحالات والعكس؛ الاستعلام المباشر يُنتج
+    // infinite recursion detected in policy.
+    const policy = rlsPhase3.slice(rlsPhase3.indexOf('create policy "correspondences_select"'))
+    const body = policy.slice(0, policy.indexOf(';'))
+    expect(body).toMatch(/is_referred_to_me/)
+    expect(body, 'لا استعلام مباشر عن جدول الإحالات').not.toMatch(/from public\.referrals/)
+
+    const referralPolicy = rlsPhase3.slice(rlsPhase3.indexOf('create policy "referrals_select"'))
+    const referralBody = referralPolicy.slice(0, referralPolicy.indexOf(';'))
+    expect(referralBody).toMatch(/can_view_correspondence/)
+    expect(referralBody).not.toMatch(/from public\.correspondences/)
+  })
+
+  it('كل استدعاء تفويض في سياسات المرحلة ٣ ملفوف بـ (select …)', () => {
+    const unwrapped: string[] = []
+    const pattern = /public\.(is_org_member|has_permission|can_access_correspondence|can_access_attachment_row|is_referred_to_me|can_view_correspondence|is_referral_target)\(/g
+    for (const match of rlsPhase3.matchAll(pattern)) {
+      const before = rlsPhase3.slice(Math.max(0, match.index - 9), match.index)
+      // داخل أجسام الدوال لا حاجة للف — نفحص السياسات فقط.
+      const context = rlsPhase3.slice(Math.max(0, match.index - 600), match.index)
+      const inPolicy = context.lastIndexOf('create policy') > context.lastIndexOf('$$')
+      if (inPolicy && !before.endsWith('(select ')) unwrapped.push(`${match[1]} @${match.index}`)
+    }
+    expect(unwrapped, `غير ملفوف: ${unwrapped.join(', ')}`).toEqual([])
+  })
+
+  it('المرحلة ٣ إضافية — لا حذف بيانات ولا تضييق قيد', () => {
+    for (const [name, sql] of [
+      ['0012', corrCore], ['0013', refNumbers], ['0014', attachments],
+      ['0015', referrals], ['0016', rlsPhase3],
+    ] as const) {
+      const stripped = sql.replace(/--[^\n]*/g, '')
+      expect(stripped, `${name} لا يحذف جدولًا`).not.toMatch(/drop table/i)
+      expect(stripped, `${name} لا يحذف عمودًا`).not.toMatch(/drop column/i)
+      expect(stripped, `${name} لا يمسح بيانات`).not.toMatch(/truncate/i)
+      expect(stripped, `${name} لا يفرض not null على عمود قائم`).not.toMatch(/alter column \w+ set not null/i)
+    }
   })
 })

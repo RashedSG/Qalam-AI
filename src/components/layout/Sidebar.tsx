@@ -3,7 +3,14 @@ import { cn } from '@/lib/utils'
 import { useI18n } from '@/hooks/useI18n'
 import { useAuthorization } from '@/hooks/useAuthorization'
 import { Logo } from '@/components/ui/Logo'
-import { ACCOUNT_NAV, ADMIN_NAV, LIBRARY_NAV, PRIMARY_NAV, type NavItem } from './navItems'
+import {
+  ACCOUNT_NAV,
+  ADMIN_NAV,
+  ENTERPRISE_NAV,
+  LIBRARY_NAV,
+  PRIMARY_NAV,
+  type NavItem,
+} from './navItems'
 
 function NavSection({ items, title }: { items: NavItem[]; title?: string }) {
   const { t } = useI18n()
@@ -36,10 +43,14 @@ function NavSection({ items, title }: { items: NavItem[]; title?: string }) {
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { t } = useI18n()
-  const { can } = useAuthorization()
+  const { can, organization } = useAuthorization()
 
   // التنقل واعٍ بالصلاحيات: لا يرى المستخدم مسارًا لن يستطيع استخدامه.
   const adminItems = ADMIN_NAV.filter((item) => !item.permission || can(item.permission))
+  // قسم المراسلات المؤسسية بلا معنى خارج مؤسسة.
+  const enterpriseItems = organization
+    ? ENTERPRISE_NAV.filter((item) => !item.permission || can(item.permission))
+    : []
 
   return (
     <nav className="flex h-full flex-col gap-1 overflow-y-auto p-3" onClick={onNavigate}>
@@ -47,6 +58,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Logo />
       </div>
       <NavSection items={PRIMARY_NAV} />
+      <NavSection items={enterpriseItems} title={t('nav.correspondence')} />
       <NavSection items={LIBRARY_NAV} title={t('nav.library')} />
       <NavSection items={adminItems} title={t('nav.administration')} />
       <div className="mt-auto pt-4">

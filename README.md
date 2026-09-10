@@ -116,6 +116,14 @@ cp .env.example .env
    | 9 | `supabase/migrations/0009_backfill_organization.sql` | **نقل البيانات القائمة** — يتحقق ويفشل بصوت عالٍ |
    | 10 | `supabase/migrations/0010_rls_rbac.sql` | RLS واعية بالمؤسسة والدور والنطاق |
    | 11 | `supabase/migrations/0011_audit_triggers.sql` | تدقيق تلقائي للتغييرات الحاكمة |
+   | 12 | `supabase/migrations/0012_correspondence_core.sql` | الاتجاه، الحقول المؤسسية، التصنيف الأمني |
+   | 13 | `supabase/migrations/0013_reference_numbers.sql` | مولّد أرقام المراسلات (ذرّي وقابل للتخصيص) |
+   | 14 | `supabase/migrations/0014_attachments.sql` | المرفقات وسياسات Storage |
+   | 15 | `supabase/migrations/0015_referrals_notifications.sql` | الإحالات والإشعارات |
+   | 16 | `supabase/migrations/0016_rls_phase3.sql` | RLS للمراسلة المؤسسية |
+   | 17 | `supabase/migrations/0017_attachment_permissions.sql` | مواءمة صلاحيات المرفقات مع الاطّلاع |
+
+   ⚠️ المرفقات تحتاج خطوة يدوية واحدة — راجع **[`docs/attachments.md`](docs/attachments.md)**.
 
    جميع الملفات آمنة لإعادة التنفيذ (تم التحقق منها بتنفيذها فعليًا على PostgreSQL 16).
 
@@ -264,7 +272,7 @@ setActiveAiProvider('anthropic')
 
 ## الاختبارات
 
-`npm run test` — **167 اختبارًا** تغطي:
+`npm run test` — **187 اختبارًا** تغطي:
 
 - مخططات مخرجات AI (Structured Outputs) ورفض الاستجابات غير الصالحة
 - وحدات الـ prompts: اختلاف الصيغ الثلاث فعليًا، تغطية النقاط، منع اختراع المعلومات، نفي الضمان القانوني
@@ -278,9 +286,10 @@ setActiveAiProvider('anthropic')
 - افتراضات RLS في ملفات الهجرة، وأن كل إجراء يعمل على `auth.uid()` فقط
 - فحص تسريب الأسرار في كود المتصفح وكود الخادم
 
-بالإضافة إلى **٦١ اختبار تكامل** على PostgreSQL حقيقي — حد المعدّل، بوابة التسجيل،
-وعزل المؤسسات والأدوار والنطاقات وسجل التدقيق. معظمها **سلبي**: «هذا المستخدم يجب
-ألا…». تُتخطى تلقائيًا بلا `QALAM_TEST_DATABASE_URL`.
+بالإضافة إلى **١١٢ اختبار تكامل** على PostgreSQL حقيقي — حد المعدّل، بوابة التسجيل،
+عزل المؤسسات والأدوار والنطاقات، سجل التدقيق، التصنيف الأمني، ذرّية أرقام المراسلات،
+الإحالات والمرفقات. معظمها **سلبي**: «هذا المستخدم يجب ألا…». تُتخطى تلقائيًا بلا
+`QALAM_TEST_DATABASE_URL`.
 راجع **[`docs/testing.md`](docs/testing.md)** و**[`docs/authorization.md`](docs/authorization.md)**.
 
 ---
@@ -289,7 +298,7 @@ setActiveAiProvider('anthropic')
 
 Microsoft 365 · إرسال مباشر عبر Outlook/Gmail · SSO · OCR · رفع PDF/Word · إدخال صوتي · Fine-tuning · RAG على وثائق المؤسسة · تطبيق جوال أصلي.
 
-**أُنجز منذ V1:** المؤسسات والهيكل التنظيمي والأدوار والصلاحيات ولوحة الإدارة وسجل التدقيق (المرحلة ٢).
+**أُنجز منذ V1:** المؤسسات والهيكل والأدوار والصلاحيات ولوحة الإدارة وسجل التدقيق (المرحلة ٢) · الوارد والصادر وأرقام المراسلات والتصنيف الأمني والإحالات والمرفقات والإشعارات (المرحلة ٣).
 
 ---
 

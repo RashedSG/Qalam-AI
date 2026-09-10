@@ -46,6 +46,9 @@ const StructurePage = lazy(() => import('@/pages/organization/StructurePage'))
 const UsersPage = lazy(() => import('@/pages/organization/UsersPage'))
 const RolesPage = lazy(() => import('@/pages/organization/RolesPage'))
 const AuditPage = lazy(() => import('@/pages/organization/AuditPage'))
+const InboxPage = lazy(() => import('@/pages/enterprise/InboxPage'))
+const OutboxPage = lazy(() => import('@/pages/enterprise/OutboxPage'))
+const MyWorkPage = lazy(() => import('@/pages/enterprise/MyWorkPage'))
 
 function PageLoader() {
   return (
@@ -97,6 +100,15 @@ export default function App() {
                               <Route path="/favorites" element={<FavoritesPage />} />
                               <Route path="/profile" element={<ProfilePage />} />
                               <Route path="/settings" element={<SettingsPage />} />
+
+                              {/* المراسلة المؤسسية. «صندوق عملي» بلا حارس:
+                                  كل عضو قد تُحال إليه مراسلة، والصفحة تعرض
+                                  ما يسمح به RLS ولا شيء غيره. */}
+                              <Route path="/my-work" element={<MyWorkPage />} />
+                              <Route element={<RequirePermission permission="correspondence.view" />}>
+                                <Route path="/inbox" element={<InboxPage />} />
+                                <Route path="/outbox" element={<OutboxPage />} />
+                              </Route>
 
                               {/* الإدارة — الحارس يخفي الصفحة، وRLS يمنع البيانات. */}
                               <Route element={<RequirePermission permission="organization.manage" scope="organization" />}>
