@@ -40,9 +40,23 @@ export default {
           muted: '#5A6B80',
         },
       },
+      /*
+       * ⚠️ الخط الأساسي يُجلب من Google وقت التشغيل. وشبكات الجهات الحكومية
+       *    تحجب النطاقات الخارجية كثيرًا — فيسقط الخط في العرض نفسه. البدائل
+       *    أدناه عربية صريحة (Noto وSegoe وTahoma) لا `system-ui` وحدها،
+       *    فيبقى النص مقروءًا ومتناسقًا بدل أن يقع على خط بلا عربية لائقة.
+       *
+       *    والحل الجذري استضافة الخط ذاتيًّا — راجع docs/operations.md.
+       */
       fontFamily: {
-        sans: ['"IBM Plex Sans Arabic"', '"Inter"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
-        display: ['"IBM Plex Sans Arabic"', '"Inter"', 'system-ui', 'sans-serif'],
+        sans: [
+          '"IBM Plex Sans Arabic"', '"Noto Sans Arabic"', '"Segoe UI"', 'Tahoma',
+          '"Inter"', 'system-ui', '-apple-system', 'sans-serif',
+        ],
+        display: [
+          '"IBM Plex Sans Arabic"', '"Noto Sans Arabic"', '"Segoe UI"', 'Tahoma',
+          '"Inter"', 'system-ui', 'sans-serif',
+        ],
       },
       boxShadow: {
         card: '0 1px 2px rgba(17, 37, 61, 0.04), 0 8px 24px -12px rgba(17, 37, 61, 0.14)',

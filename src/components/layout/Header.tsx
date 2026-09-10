@@ -30,11 +30,13 @@ export function Header({ onOpenMenu }: { onOpenMenu: () => void }) {
         <Menu className="size-5" aria-hidden="true" />
       </button>
 
-      <div className="lg:hidden">
+      {/* الشعار ينكمش والأزرار لا: عند ٣٩٠ بكسل كان مجموع العرض يتجاوز
+          الشاشة بـ٢٠ بكسل فتنزلق الصفحة أفقيًّا — وهو أول ما يُلاحَظ على هاتف. */}
+      <div className="min-w-0 shrink overflow-hidden lg:hidden">
         <Logo size="sm" />
       </div>
 
-      <div className="ms-auto flex items-center gap-1">
+      <div className="ms-auto flex shrink-0 items-center gap-1">
         <NotificationsBell />
         <button
           type="button"

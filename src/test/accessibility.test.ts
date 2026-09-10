@@ -74,6 +74,22 @@ describe('الوصولية — فحوص ساكنة', () => {
     expect(offenders).toEqual([])
   })
 
+  it('كل صفحة تحمل عنوانًا رئيسيًّا واحدًا', () => {
+    // صفحة تفاصيل المراسلة — أكثر الصفحات فتحًا — كانت بلا h1 إطلاقًا:
+    // عنوانها يأتي من CardHeader وهو يُصدر h2. لم يظهر إلا بفحص الصفحة
+    // المُصيَّرة في متصفح.
+    const offenders: string[] = []
+    for (const file of walk(join(root, 'src/pages'))) {
+      const source = readFileSync(file, 'utf8')
+      const declaresHeading =
+        /<h1[\s>]/.test(source) ||          // عنوان مباشر
+        /titleAs="h1"/.test(source) ||       // عنوان بطاقة مرفوع المستوى
+        /<AuthLayout/.test(source)           // الغلاف يوفّره لصفحات الدخول
+      if (!declaresHeading) offenders.push(file.replace(`${root}/`, ''))
+    }
+    expect(offenders).toEqual([])
+  })
+
   it('التطبيق يعلن اللغة والاتجاه ويغيّرهما مع تغيّر اللغة', () => {
     const html = readFileSync(join(root, 'index.html'), 'utf8')
     expect(html).toMatch(/<html lang="ar" dir="rtl">/)

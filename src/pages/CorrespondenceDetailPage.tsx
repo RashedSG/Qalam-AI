@@ -289,7 +289,10 @@ export default function CorrespondenceDetailPage() {
       </Link>
 
       <Card>
+        {/* عنوان الصفحة الفعلي: كانت الصفحة بلا h1 إطلاقًا، وهي أكثر
+            صفحات التطبيق فتحًا. */}
         <CardHeader
+          titleAs="h1"
           title={data.title || data.subject || '—'}
           description={`${data.recipient || '—'} · ${formatDate(data.created_at, lang)}`}
           action={

@@ -15,16 +15,19 @@ export function CardHeader({
   description,
   action,
   className,
+  /** مستوى العنوان. الافتراضي h2؛ يُرفع إلى h1 حين تكون البطاقة عنوان الصفحة. */
+  titleAs: Heading = 'h2',
 }: {
   title: ReactNode
   description?: ReactNode
   action?: ReactNode
   className?: string
+  titleAs?: 'h1' | 'h2' | 'h3'
 }) {
   return (
     <div className={cn('flex flex-wrap items-start justify-between gap-3 p-5 pb-0', className)}>
       <div className="min-w-0">
-        <h2 className="text-base font-semibold sm:text-lg">{title}</h2>
+        <Heading className="text-base font-semibold sm:text-lg">{title}</Heading>
         {description ? <p className="q-muted mt-1 text-sm">{description}</p> : null}
       </div>
       {action}
