@@ -692,3 +692,14 @@ as $$
 $$;
 
 grant execute on function public.classification_impact(uuid, text, integer) to authenticated;
+
+
+-- =============================================================================
+-- 4) نظافة: لا دالة `security definer` متاحة لـanon إلا التحقق العلني
+--
+-- `audit_actor()` تعيد auth.uid() فحسب، فهي غير مؤذية — لكن القاعدة تبقى:
+-- ما يتجاوز RLS لا يُترك مفتوحًا لمن لا حساب له. وفحصٌ يُظهر دائمًا فشلًا
+-- واحدًا «معروفًا أنه حميد» يُدرّب القارئ على تجاهل الفحص كلّه.
+-- =============================================================================
+revoke all on function public.audit_actor() from public, anon;
+grant execute on function public.audit_actor() to authenticated;
